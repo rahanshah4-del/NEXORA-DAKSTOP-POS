@@ -1,0 +1,53 @@
+appId: com.nexorasolution.pos
+productName: Nexora Solution POS
+copyright: Copyright © 2026 Nexora Solution
+directories:
+  buildResources: resources
+  output: dist
+
+files:
+  - out/**/*
+  - "!node_modules/**/*"
+
+asar: true
+asarUnpack:
+  - "node_modules/better-sqlite3/**/*"
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: resources/icon.ico
+  artifactName: ${productName}-${version}-Setup.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Nexora Solution POS
+  unicode: true
+
+mac:
+  target:
+    - dmg
+    - zip
+  icon: resources/icon.png
+  category: public.app-category.business
+  artifactName: ${productName}-${version}-mac.${ext}
+
+linux:
+  target:
+    - AppImage
+    - deb
+  icon: resources/icon.png
+  category: Office
+  artifactName: ${productName}-${version}-linux.${ext}
+
+publish:
+  provider: generic
+  url: https://nexorasolution.online/releases
+  channel: latest

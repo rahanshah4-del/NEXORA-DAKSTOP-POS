@@ -1,0 +1,144 @@
+Nexora Solution POS — Terms of Service
+
+© Nexora Solution
+https://nexorasolution.online
+
+PLEASE READ THESE TERMS OF SERVICE ("TERMS") CAREFULLY BEFORE INSTALLING
+OR USING Nexora Solution POS ("THE SOFTWARE"). BY INSTALLING, COPYING, OR
+OTHERWISE USING THE SOFTWARE, YOU AGREE TO BE BOUND BY THESE TERMS. IF YOU
+DO NOT AGREE TO THESE TERMS, DO NOT INSTALL OR USE THE SOFTWARE.
+
+1. SOFTWARE LICENSE
+
+Nexora Solution ("Nexora Solution", "we", "us", or "our") grants you a
+personal, non-exclusive, non-transferable, revocable license to install
+and use the Software on devices that you own or control, solely in
+accordance with these Terms. This license is granted for the version of
+the Software you have installed and any updates that we make available
+to you under these Terms.
+
+2. AUTHORIZED USAGE
+
+You may use the Software only for lawful business purposes and in
+accordance with these Terms and all applicable laws and regulations. You
+agree not to use the Software for any purpose that is unlawful or
+prohibited by these Terms.
+
+3. COMMERCIAL USE
+
+The Software is intended for commercial use within your business. You are
+responsible for ensuring that your use of the Software complies with all
+laws applicable to your business, including any tax, accounting, and
+record-keeping obligations.
+
+4. USER RESPONSIBILITY
+
+You are responsible for all activity that occurs through your use of the
+Software, including the actions of your employees, agents, and other
+authorized users. You are responsible for maintaining the confidentiality
+of any access credentials and for controlling access to the devices on
+which the Software is installed.
+
+5. DATA RESPONSIBILITY
+
+You are solely responsible for the accuracy, quality, integrity,
+legality, and appropriateness of all business data entered into, stored
+by, or processed through the Software. The Software records and stores
+business data locally on your device as part of its normal operation.
+
+6. LOCAL DATABASE RESPONSIBILITY
+
+The Software uses a local database stored on your device to retain your
+business data. This database is stored in a user-writable application
+data location and is not automatically removed when the Software is
+uninstalled. You are responsible for the management and security of this
+local database and the device on which it resides.
+
+7. BACKUP RESPONSIBILITY
+
+Nexora Solution does not automatically back up your data. You are solely
+responsible for regularly backing up and safeguarding your business data.
+We strongly recommend that you maintain your own backup and disaster
+recovery procedures. We are not responsible for any loss or corruption of
+data resulting from hardware failure, misuse, or any other cause.
+
+8. SOFTWARE UPDATES
+
+We may, from time to time and at our sole discretion, provide updates,
+upgrades, or modifications to the Software. These Terms apply to all such
+updates. We have no obligation to provide any updates, support, or
+maintenance, and may discontinue the Software at any time.
+
+9. INTELLECTUAL PROPERTY
+
+The Software, including all code, design, graphics, and documentation, is
+the property of Nexora Solution and is protected by intellectual property
+laws. All rights not expressly granted to you under these Terms are
+reserved. You may not copy, modify, distribute, sell, lease, reverse
+engineer, decompile, or disassemble the Software, in whole or in part,
+except as expressly permitted by law.
+
+10. RESTRICTIONS
+
+You may not: (a) use the Software to violate any law; (b) rent, lease,
+sublicense, or otherwise transfer the Software; (c) remove or alter any
+proprietary notices; or (d) use the Software in any manner that could
+damage, disable, or impair the Software or interfere with its operation.
+
+11. WARRANTY DISCLAIMER
+
+THE SOFTWARE IS PROVIDED "AS IS" AND "AS AVAILABLE", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED
+WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND
+NON-INFRINGEMENT. WE DO NOT WARRANT THAT THE SOFTWARE WILL BE
+UNINTERRUPTED, ERROR-FREE, OR FREE OF HARMFUL COMPONENTS, OR THAT ANY
+DEFECTS WILL BE CORRECTED.
+
+12. LIMITATION OF LIABILITY
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, IN NO EVENT SHALL
+Nexora Solution BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL,
+CONSEQUENTIAL, OR PUNITIVE DAMAGES, INCLUDING LOSS OF PROFITS, LOSS OF
+DATA, BUSINESS INTERRUPTION, OR LOSS OF GOODWILL, ARISING OUT OF OR
+RELATED TO YOUR USE OF OR INABILITY TO USE THE SOFTWARE, EVEN IF ADVISED
+OF THE POSSIBILITY OF SUCH DAMAGES. TO THE MAXIMUM EXTENT PERMITTED BY
+LAW, OUR TOTAL LIABILITY FOR ANY CLAIM ARISING OUT OF OR RELATING TO THESE
+TERMS OR THE SOFTWARE SHALL NOT EXCEED THE AMOUNT YOU PAID FOR THE
+SOFTWARE.
+
+13. SUPPORT
+
+Support for the Software is provided at our discretion and may be
+contacted through our website. We do not guarantee the availability,
+timeliness, or outcome of any support.
+
+14. TERMINATION
+
+These Terms are effective until terminated. We may terminate these Terms
+and your right to use the Software at any time, with or without notice.
+Upon termination, you must cease all use of the Software and delete all
+copies in your possession. Sections relating to intellectual property,
+warranty disclaimer, limitation of liability, and any other provisions
+that by their nature should survive will survive termination.
+
+15. ACCEPTANCE OF TERMS
+
+By installing and using the Software, you acknowledge that you have read,
+understood, and agree to be bound by these Terms. If you are accepting
+these Terms on behalf of an organization, you represent that you have the
+authority to bind that organization to these Terms.
+
+16. GENERAL
+
+These Terms constitute the entire agreement between you and Nexora
+Solution regarding the Software. If any provision of these Terms is found
+to be unenforceable, the remaining provisions will remain in full force
+and effect. Our failure to enforce any right or provision of these Terms
+will not be considered a waiver of those rights.
+
+---
+
+Nexora Solution
+https://nexorasolution.online
+
+© Nexora Solution. All rights reserved.

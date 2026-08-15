@@ -1,0 +1,131 @@
+rules_version = '2';
+
+// ════════════════════════════════════════════════════════════════════════════
+//  Nexora POS — Firestore Security Rules
+//
+//  Auth model:
+//    Staff log in via the `teamStaffLogin` Cloud Function, which issues a
+//    Firebase custom token.  After signInWithCustomToken(), auth.uid == staff.uid.
+//
+//  Two ways to verify workspace membership (pick ONE and uncomment it in
+//  the isStaff() function below):
+//
+//  OPTION A — Custom claim (preferred):
+//    The `teamStaffLogin` Cloud Function sets auth.token.workspaceId when
+//    it creates the custom token.  Zero extra Firestore reads per request.
+//    Use this if your Cloud Function already sets the claim.
+//
+//  OPTION B — Staff sub-collection lookup:
+//    Checks that a document exists at workspaces/{workspaceId}/staff/{uid}.
+//    Use this if the Cloud Function does NOT set custom claims, or if staff
+//    documents are stored there.
+// ════════════════════════════════════════════════════════════════════════════
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helper: is the caller an authenticated staff member of this workspace?
+    function isStaff(workspaceId) {
+      // OPTION A — custom claim (uncomment if teamStaffLogin sets the claim):
+      return request.auth != null
+          && request.auth.token.get('workspaceId', '') == workspaceId;
+
+      // OPTION B — staff sub-collection document check (uncomment if needed):
+      // return request.auth != null
+      //     && exists(/databases/$(database)/documents/workspaces/$(workspaceId)/staff/$(request.auth.uid));
+    }
+
+    // ── Helper: write is safe only when immutable identity fields are intact
+    function safeCreate(workspaceId) {
+      return isStaff(workspaceId)
+          && request.resource.data.workspaceId == workspaceId
+          && request.resource.data.createdBy == request.auth.uid;
+    }
+
+    function safeUpdate(workspaceId) {
+      return isStaff(workspaceId)
+          // workspaceId must not change on updates
+          && request.resource.data.workspaceId == resource.data.workspaceId;
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  Workspace root document
+    // ════════════════════════════════════════════════════════════════════════
+    match /workspaces/{workspaceId} {
+      allow read: if isStaff(workspaceId);
+      // Only the owning service account / admin should create/delete workspaces
+      allow write: if false;
+
+      // ──────────────────────────────────────────────────────────────────
+      //  menuItems  —  workspaces/{workspaceId}/menuItems/{docId}
+      //  THE COLLECTION CAUSING THE PERMISSION ERROR
+      // ──────────────────────────────────────────────────────────────────
+      match /menuItems/{docId} {
+        allow read: if isStaff(workspaceId);
+        allow create: if safeCreate(workspaceId);
+        allow update: if safeUpdate(workspaceId);
+        allow delete: if isStaff(workspaceId);
+      }
+
+      // ──────────────────────────────────────────────────────────────────
+      //  tables  —  workspaces/{workspaceId}/tables/{docId}
+      //  THE COLLECTION CAUSING THE PERMISSION ERROR
+      // ──────────────────────────────────────────────────────────────────
+      match /tables/{docId} {
+        allow read: if isStaff(workspaceId);
+        allow create: if safeCreate(workspaceId);
+        allow update: if safeUpdate(workspaceId);
+        allow delete: if isStaff(workspaceId);
+      }
+
+      // ──────────────────────────────────────────────────────────────────
+      //  restaurantPayments
+      // ──────────────────────────────────────────────────────────────────
+      match /restaurantPayments/{docId} {
+        allow read: if isStaff(workspaceId);
+        allow create: if safeCreate(workspaceId);
+        allow update: if safeUpdate(workspaceId);
+        allow delete: if false;
+      }
+
+      // ──────────────────────────────────────────────────────────────────
+      //  restaurantCashSessions
+      // ──────────────────────────────────────────────────────────────────
+      match /restaurantCashSessions/{docId} {
+        allow read: if isStaff(workspaceId);
+        allow create: if safeCreate(workspaceId);
+        allow update: if safeUpdate(workspaceId);
+        allow delete: if false;
+      }
+
+      // ──────────────────────────────────────────────────────────────────
+      //  restaurantRecipes
+      // ──────────────────────────────────────────────────────────────────
+      match /restaurantRecipes/{docId} {
+        allow read: if isStaff(workspaceId);
+        allow create: if safeCreate(workspaceId);
+        allow update: if safeUpdate(workspaceId);
+        allow delete: if isStaff(workspaceId);
+      }
+
+      // ──────────────────────────────────────────────────────────────────
+      //  restaurantReservations
+      // ──────────────────────────────────────────────────────────────────
+      match /restaurantReservations/{docId} {
+        allow read: if isStaff(workspaceId);
+        allow create: if safeCreate(workspaceId);
+        allow update: if safeUpdate(workspaceId);
+        allow delete: if isStaff(workspaceId);
+      }
+
+      // ──────────────────────────────────────────────────────────────────
+      //  staff sub-collection  (used by OPTION B above)
+      //  Only the staff member themselves can read their own doc.
+      // ──────────────────────────────────────────────────────────────────
+      match /staff/{staffUid} {
+        allow read: if request.auth != null && request.auth.uid == staffUid;
+        allow write: if false; // managed by admin SDK / Cloud Functions only
+      }
+    }
+  }
+}

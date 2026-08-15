@@ -1,0 +1,268 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ───── Nexora POS — Light Theme (Green Palette) ───── */
+:root {
+  /* Surface — White/Off-white */
+  --color-surface: 255 255 255;
+  --color-surface-secondary: 248 250 249;
+  --color-surface-tertiary: 241 245 242;
+  --color-surface-elevated: 255 255 255;
+
+  /* Content — Dark grays */
+  --color-content: 17 24 20;
+  --color-content-secondary: 71 85 77;
+  --color-content-tertiary: 148 163 153;
+  --color-content-inverse: 255 255 255;
+
+  /* Border — Light grays with green tint */
+  --color-border: 226 232 228;
+  --color-border-strong: 203 213 208;
+
+  /* Primary — Nexora Green */
+  --color-primary: 15 123 71;
+  --color-primary-hover: 5 102 56;
+  --color-primary-light: 204 237 219;
+  --color-primary-content: 255 255 255;
+
+  /* Accent — Dark green */
+  --color-accent: 32 73 55;
+  --color-accent-hover: 24 56 42;
+
+  /* Icon Bar */
+  --color-iconbar: 255 255 255;
+  --color-iconbar-hover: 240 249 244;
+  --color-iconbar-active: 15 123 71;
+  --color-iconbar-text: 65 100 85;
+  --color-iconbar-text-active: 15 123 71;
+
+  /* Sidebar (legacy — for settings etc.) */
+  --color-sidebar: 255 255 255;
+  --color-sidebar-hover: 240 249 244;
+  --color-sidebar-active: 232 245 237;
+  --color-sidebar-text: 71 85 77;
+  --color-sidebar-text-active: 15 123 71;
+  --color-sidebar-accent: 15 123 71;
+
+  /* Semantic Colors */
+  --color-success: 15 123 71;
+  --color-warning: 217 119 6;
+  --color-danger: 220 38 38;
+  --color-info: 14 165 233;
+
+  /* Layout Tokens */
+  --iconbar-width: 56px;
+  --sidebar-width: 240px;
+  --sidebar-collapsed-width: 64px;
+  --header-height: 56px;
+  --right-panel-width: 380px;
+  --bottom-bar-height: 56px;
+
+  /* Typography Scale */
+  --text-xs: 0.6875rem;
+  --text-sm: 0.75rem;
+  --text-base: 0.8125rem;
+  --text-lg: 0.9375rem;
+  --text-xl: 1.0625rem;
+  --text-2xl: 1.25rem;
+  --text-3xl: 1.5rem;
+
+  /* Border Radius */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+
+  /* Z-Index Scale */
+  --z-sidebar: 40;
+  --z-header: 50;
+  --z-right-panel: 45;
+  --z-overlay: 60;
+  --z-modal: 70;
+  --z-toast: 80;
+  --z-tooltip: 90;
+}
+
+/* ───── Base Styles ───── */
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    font-size: 13px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply font-sans text-content bg-surface;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    user-select: none;
+    line-height: 1.5;
+  }
+
+  #root {
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* Scrollbar styling — subtle */
+  ::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #d1d5db;
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #9ca3af;
+  }
+
+  :focus-visible {
+    outline: 2px solid rgb(var(--color-primary));
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+
+  ::selection {
+    background: rgba(var(--color-primary), 0.15);
+    color: rgb(var(--color-content));
+  }
+}
+
+/* ───── Component Utilities ───── */
+@layer components {
+  .drag-region {
+    -webkit-app-region: drag;
+  }
+
+  .no-drag {
+    -webkit-app-region: no-drag;
+  }
+
+  .text-muted {
+    @apply text-content-tertiary;
+  }
+
+  .text-secondary {
+    @apply text-content-secondary;
+  }
+
+  .interactive-row {
+    @apply cursor-pointer transition-colors duration-150;
+  }
+
+  .interactive-row:hover {
+    @apply bg-surface-tertiary;
+  }
+}
+
+/* ───── Utility Extensions ───── */
+@layer utilities {
+  .truncate-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
+  .animate-slide-up {
+    animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  @keyframes slideUp {
+    from {
+      opacity: 0;
+      transform: translateY(16px) scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+}
+
+/* ───── Skeleton Shimmer Animation ───── */
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.animate-shimmer {
+  animation: shimmer 1.8s ease-in-out infinite;
+}
+
+/* ───── Apple-style loading animations ───── */
+
+/* Smooth rotating ring — calm, continuous (iOS activity indicator feel) */
+@keyframes spinRing {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-spin-ring {
+  animation: spinRing 1.1s linear infinite;
+  transform-origin: center;
+}
+
+/* Breathing logo/pulse — calm scale + opacity loop (macOS app launch feel) */
+@keyframes breathe {
+  0%, 100% { transform: scale(0.96); opacity: 0.8; }
+  50% { transform: scale(1); opacity: 1; }
+}
+
+.animate-breathe {
+  animation: breathe 1.8s ease-in-out infinite;
+  transform-origin: center;
+}
+
+/* Pulsing dot cluster — Apple "thinking" indicator */
+@keyframes dotPulse {
+  0%, 60%, 100% { transform: scale(0.7); opacity: 0.35; }
+  30% { transform: scale(1); opacity: 1; }
+}
+
+.animate-dot {
+  animation: dotPulse 1.2s ease-in-out infinite;
+  transform-origin: center;
+}
+
+/* ───── Focus Ring ───── */
+*:focus-visible {
+  outline: 2px solid rgb(var(--color-primary) / 0.5);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ───── Reduced Motion ───── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

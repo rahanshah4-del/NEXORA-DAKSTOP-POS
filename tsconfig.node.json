@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "lib": ["ESNext"],
+    "types": ["node"],
+    "composite": true
+  },
+  "include": [
+    "src/main/**/*.ts",
+    "src/preload/**/*.ts",
+    "src/database/**/*.ts",
+    "src/ipc/**/*.ts",
+    "src/firebase/**/*.ts",
+    "src/services/**/*.ts",
+    "src/sync/**/*.ts",
+    "src/types/**/*.ts",
+    "src/utils/**/*.ts",
+    "electron.vite.config.ts"
+  ],
+  "exclude": ["node_modules", "out", "dist"]
+}
