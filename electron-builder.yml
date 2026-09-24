@@ -7,11 +7,15 @@ directories:
 
 files:
   - out/**/*
-  - "!node_modules/**/*"
+  - package.json
 
 asar: true
 asarUnpack:
   - "node_modules/better-sqlite3/**/*"
+# better-sqlite3 is cross-built to win32/x64 via prebuild-install before packaging.
+# Disable electron-builder's automatic native rebuild so it doesn't clobber the
+# Windows binary with a host (darwin) build during `--win` packaging.
+npmRebuild: false
 
 win:
   target:
