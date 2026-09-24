@@ -5,15 +5,16 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/utils/cn';
 import { IconBar } from '@/components/layout/IconBar';
+import { WindowControls } from '@/components/layout/WindowControls';
 import { TableSkeleton } from '@/screens/components/SkeletonLoader';
 import { ScreenErrorState } from '@/screens/components/ScreenStates';
 import { userFriendlyError } from '@/utils/error-helper';
 import nexoraLogo from '@/assets/icons/nexora-logo-64.png';
 import {
   ChefHat, LayoutGrid, UtensilsCrossed, Package, BarChart3,
-  ChevronDown, X, User, Clock,
-  IndianRupee, ShoppingCart, Users as UsersIcon,
-  ArrowUpRight, DollarSign, Activity, Bell, RotateCw,
+  ChevronDown, User, Clock,
+  Banknote, Receipt, ShoppingCart, Users as UsersIcon,
+  ArrowUpRight, Activity, Bell, RotateCw,
   Package as PackageIcon,
 } from 'lucide-react';
 
@@ -54,6 +55,87 @@ function useLiveClock() {
   return time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 }
 
+// ── Sync / Connectivity Status Hook (mirrors Header.tsx) ──
+
+interface SyncStatus {
+  isOnline: boolean;
+  /** null when the pending count could not be read. */
+  pendingSync: number | null;
+  stuckSync: number;
+  /** null until (or unless) the app version is known. */
+  appVersion: string | null;
+}
+
+function useSyncStatus(): SyncStatus {
+  const [isOnline, setIsOnline] = useState(() => (typeof navigator !== 'undefined' ? navigator.onLine : true));
+  const [pendingSync, setPendingSync] = useState<number | null>(null);
+  const [stuckSync, setStuckSync] = useState(0);
+  const [appVersion, setAppVersion] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    setIsOnline(navigator.onLine);
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    const pollSync = async () => {
+      try {
+        const count = window.api?.local?.sync?.pendingCount;
+        if (typeof count !== 'function') return;
+        const r = await count();
+        if (cancelled) return;
+        setPendingSync(Number((r as any)?.count) || 0);
+        setStuckSync(Number((r as any)?.stuck) || 0);
+      } catch {
+        if (!cancelled) setPendingSync(null);
+      }
+    };
+    pollSync();
+    const syncTimer = setInterval(pollSync, 15_000);
+
+    let unsub: (() => void) | undefined;
+    try {
+      if (window.api?.local?.sync?.onResult) {
+        unsub = window.api.local.sync.onResult(() => {
+          pollSync();
+        });
+      }
+    } catch { /* non-critical */ }
+
+    (async () => {
+      try {
+        const getVersion = window.api?.app?.getVersion;
+        if (typeof getVersion !== 'function') return;
+        const v = await getVersion();
+        if (!cancelled && typeof v === 'string' && v.trim()) setAppVersion(v.trim());
+      } catch { /* non-critical — version stays hidden */ }
+    })();
+
+    return () => {
+      cancelled = true;
+      clearInterval(syncTimer);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      if (unsub) unsub();
+    };
+  }, []);
+
+  return { isOnline, pendingSync, stuckSync, appVersion };
+}
+
+/** "cashier" → "Cashier", "head_chef" → "Head Chef". */
+function formatRole(role: string | null | undefined): string {
+  if (!role || !role.trim()) return '';
+  return role
+    .trim()
+    .split(/[\s_-]+/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
+}
+
 // ── Component ──
 
 export default function Dashboard() {
@@ -63,6 +145,13 @@ export default function Dashboard() {
   const wsId = staffProfile?.workspaceId;
   const tables = useTableStore((s) => s.tables);
   const liveTime = useLiveClock();
+  const { isOnline, pendingSync, stuckSync, appVersion } = useSyncStatus();
+
+  const staffDisplayName = staffProfile?.staffName?.trim() || 'Staff';
+  const staffDisplayRole = formatRole(staffProfile?.staffRole);
+
+  // Amounts on this screen are in major currency units (rupees), not cents.
+  const formatMoney = (amount: number) => `${currSymbol}${amount.toLocaleString('en-PK')}`;
 
   // ── Data state ──
   const [orders, setOrders] = useState<FirestoreOrder[]>([]);
@@ -174,9 +263,9 @@ export default function Dashboard() {
   const kpiCards = [
     {
       title: "Today's Revenue",
-      value: totalOrderCount > 0 ? `${currSymbol}${revenue.toLocaleString('en-IN')}` : '—',
+      value: totalOrderCount > 0 ? formatMoney(revenue) : '—',
       sub: totalOrderCount > 0 ? `${paidOrders.length} paid orders` : 'No orders today',
-      icon: IndianRupee,
+      icon: Banknote,
       color: 'text-emerald-600',
       bg: 'bg-emerald-50',
     },
@@ -198,9 +287,9 @@ export default function Dashboard() {
     },
     {
       title: 'Avg. Order Value',
-      value: avgOrderValue > 0 ? `${currSymbol}${avgOrderValue.toLocaleString('en-IN')}` : '—',
+      value: avgOrderValue > 0 ? formatMoney(avgOrderValue) : '—',
       sub: totalOrderCount > 0 ? `${totalOrderCount} orders today` : 'No orders today',
-      icon: DollarSign,
+      icon: Receipt,
       color: 'text-purple-600',
       bg: 'bg-purple-50',
     },
@@ -233,7 +322,7 @@ export default function Dashboard() {
     const hasOrders = totalOrderCount > 0;
 
     return (
-      <div className="p-4 space-y-4">
+      <div className="p-4 pb-10 space-y-4">
         {/* Error banner when we have stale data */}
         {error && orders.length > 0 && (
           <div className="flex items-center gap-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-[11px] text-red-700">
@@ -267,10 +356,20 @@ export default function Dashboard() {
             <h3 className="text-sm font-bold text-[#111814]">Nexora Solution</h3>
             <p className="text-xs text-[#94a399]">Enterprise POS Platform</p>
             <div className="flex items-center gap-3 mt-1.5">
-              <span className="flex items-center gap-1 text-[10px] text-[#42b273] font-medium"><span className="h-1.5 w-1.5 rounded-full bg-[#42b273]" />SQLite Ready</span>
-              <span className="flex items-center gap-1 text-[10px] text-[#3b82f6] font-medium"><span className="h-1.5 w-1.5 rounded-full bg-[#3b82f6]" />Offline Ready</span>
-              <span className="flex items-center gap-1 text-[10px] text-[#8b5cf6] font-medium"><span className="h-1.5 w-1.5 rounded-full bg-[#8b5cf6]" />Sync Ready</span>
-              <span className="text-[10px] text-[#94a399] ml-2">v1.0.0</span>
+              <span className={cn('flex items-center gap-1 text-[10px] font-medium', isOnline ? 'text-[#42b273]' : 'text-[#da3849]')}>
+                <span className={cn('h-1.5 w-1.5 rounded-full', isOnline ? 'bg-[#42b273]' : 'bg-[#da3849]')} />
+                {isOnline ? 'Online' : 'Offline'}
+              </span>
+              {pendingSync === null ? (
+                <span className="flex items-center gap-1 text-[10px] text-[#94a399] font-medium"><span className="h-1.5 w-1.5 rounded-full bg-[#94a399]" />Sync status unavailable</span>
+              ) : stuckSync > 0 ? (
+                <span className="flex items-center gap-1 text-[10px] text-[#da3849] font-medium"><span className="h-1.5 w-1.5 rounded-full bg-[#da3849]" />{stuckSync} stuck in sync</span>
+              ) : pendingSync > 0 ? (
+                <span className="flex items-center gap-1 text-[10px] text-[#d97706] font-medium"><span className="h-1.5 w-1.5 rounded-full bg-[#d97706]" />{pendingSync} pending sync</span>
+              ) : (
+                <span className="flex items-center gap-1 text-[10px] text-[#8b5cf6] font-medium"><span className="h-1.5 w-1.5 rounded-full bg-[#8b5cf6]" />All synced</span>
+              )}
+              {appVersion && <span className="text-[10px] text-[#94a399] ml-2">v{appVersion}</span>}
             </div>
           </div>
         </div>
@@ -302,7 +401,7 @@ export default function Dashboard() {
                     >
                       {h.revenue > 0 && (
                         <div className="absolute -top-5 left-1/2 -translate-x-1/2 bg-[#111814] text-white text-[9px] px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                          {currSymbol}{h.revenue.toLocaleString('en-IN')} • {h.orders} orders
+                          {formatMoney(h.revenue)} • {h.orders} orders
                         </div>
                       )}
                     </div>
@@ -335,7 +434,7 @@ export default function Dashboard() {
                       <p className="text-[9px] text-[#94a399]">{p.qty} sold</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-[11px] font-semibold">{currSymbol}{p.revenue.toLocaleString('en-IN')}</p>
+                      <p className="text-[11px] font-semibold">{formatMoney(p.revenue)}</p>
                     </div>
                   </div>
                 ))}
@@ -377,7 +476,7 @@ export default function Dashboard() {
                         </div>
                       </td>
                       <td className="px-3 py-2.5 text-[11px] font-semibold">{s.orders}</td>
-                      <td className="px-3 py-2.5 text-[11px] font-semibold text-[#111814]">{currSymbol}{s.sales.toLocaleString('en-IN')}</td>
+                      <td className="px-3 py-2.5 text-[11px] font-semibold text-[#111814]">{formatMoney(s.sales)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -431,13 +530,13 @@ export default function Dashboard() {
             </span>
             <div className="flex items-center gap-1.5 text-[11px] text-[#47554d]">
               <div className="h-6 w-6 rounded-full bg-[#cceddb] flex items-center justify-center"><User className="h-3 w-3 text-[#0f7b47]" /></div>
-              Admin <ChevronDown className="h-3 w-3 text-[#94a399]" />
+              <div className="flex flex-col leading-tight max-w-[140px]">
+                <span className="truncate font-medium text-[#111814]" title={staffDisplayName}>{staffDisplayName}</span>
+                {staffDisplayRole && <span className="truncate text-[9px] text-[#94a399]">{staffDisplayRole}</span>}
+              </div>
+              <ChevronDown className="h-3 w-3 text-[#94a399]" />
             </div>
-            <div className="flex items-center ml-1">
-              <button className="h-7 w-9 flex items-center justify-center text-[#94a399] hover:text-[#47554d] hover:bg-[#f1f5f2] rounded transition-colors">─</button>
-              <button className="h-7 w-9 flex items-center justify-center text-[#94a399] hover:text-[#47554d] hover:bg-[#f1f5f2] rounded transition-colors">□</button>
-              <button className="h-7 w-9 flex items-center justify-center text-[#94a399] hover:text-white hover:bg-[#da3849] rounded transition-colors"><X className="h-3.5 w-3.5" /></button>
-            </div>
+            <WindowControls className="ml-1 [&>button]:h-7 [&>button]:w-9 [&>button]:rounded" />
           </div>
         </header>
 
@@ -454,20 +553,20 @@ export default function Dashboard() {
           </button>
         </div>
 
-        <div className="flex-1 overflow-auto">
+        <div className="flex-1 min-h-0 overflow-auto">
           {renderContent()}
         </div>
 
         <footer className="flex items-center justify-between h-[32px] px-3 bg-[#204937] shrink-0">
           <div className="flex items-center gap-3 text-[9px] text-white/70">
             <span>Today: <span className="text-white font-semibold">{totalOrderCount} orders</span></span>
-            <span>Revenue: <span className="text-white font-semibold">{currSymbol}{revenue.toLocaleString('en-IN')}</span></span>
+            <span>Revenue: <span className="text-white font-semibold">{formatMoney(revenue)}</span></span>
             <span>Tables: <span className="text-white font-semibold">{totalTables > 0 ? `${activeTables}/${totalTables} active` : '—'}</span></span>
           </div>
           <div className="text-[9px] text-white/60 flex items-center gap-3">
             <span className="flex items-center gap-1"><Bell className="h-3 w-3" />Last updated: {liveTime}</span>
             <span className="text-white/40">|</span>
-            <span>v1.0.0 &mdash; Powered by Nexora Solution</span>
+            <span>{appVersion ? <>v{appVersion} &mdash; </> : null}Powered by Nexora Solution</span>
           </div>
         </footer>
       </div>
