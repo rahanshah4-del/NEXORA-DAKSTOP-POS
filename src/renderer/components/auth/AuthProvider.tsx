@@ -1,10 +1,20 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { useAuthStore } from '@/stores/auth-store';
+import { notifyError } from '@/stores/toast-store';
 import { userFriendlyError } from '@/utils/error-helper';
 
 interface AuthProviderProps {
   children: ReactNode;
 }
+
+const SESSION_EXPIRED_MESSAGE = 'Session expired — please enter your PIN again.';
+
+/**
+ * An intentional sign-out also reports signedIn=false, and that push arrives
+ * before useAuth().logout() clears the store. Re-check the store after this
+ * delay: if it cleared itself in the meantime the sign-out was deliberate.
+ */
+const SESSION_DROP_GRACE_MS = 400;
 
 export function AuthProvider({ children }: AuthProviderProps) {
   const setUser = useAuthStore((s) => s.setUser);
@@ -69,6 +79,43 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setProfileReady();
       });
   }, [setUser, setStaffProfile, setError, setLoading, setProfileReady]);
+
+  // ── Main-process session bridge ──
+  // The main process owns the only real Firebase session. If it drops while
+  // the app is running, lock the UI instead of leaving it open on top of
+  // cloud calls that now fail silently.
+  useEffect(() => {
+    if (!window.api?.auth?.onStateChanged) return;
+
+    let graceTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const unsubscribe = window.api.auth.onStateChanged((state) => {
+      // Sign-in needs no handling — the login flows populate the store.
+      if (state.signedIn) return;
+
+      if (graceTimer) clearTimeout(graceTimer);
+      graceTimer = setTimeout(() => {
+        graceTimer = null;
+        const store = useAuthStore.getState();
+        // Already logged out (startup, or an intentional sign-out that has
+        // since cleared the store) — nothing to announce.
+        if (!store.isAuthenticated) return;
+
+        // clearAuth() resets error to null, so set the message after it.
+        // ProtectedRoute sends the user to /login once isAuthenticated flips.
+        // Remembered workspace code + staff ID live in login-creds.enc and are
+        // deliberately left untouched so LoginForm still prefills them.
+        store.clearAuth();
+        store.setError(SESSION_EXPIRED_MESSAGE);
+        notifyError(SESSION_EXPIRED_MESSAGE);
+      }, SESSION_DROP_GRACE_MS);
+    });
+
+    return () => {
+      if (graceTimer) clearTimeout(graceTimer);
+      unsubscribe();
+    };
+  }, []);
 
   return <>{children}</>;
 }

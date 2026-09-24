@@ -82,26 +82,19 @@ export const CancelOrderModal: React.FC<CancelOrderModalProps> = ({
   const appendDigit = (d: string) => {
     setPin((prev) => {
       if (prev.length >= PIN_LENGTH) return prev;
-      const next = prev + d;
-      console.log(`[CancelOrder] tap "${d}" → pin="${next}" (${next.length}/${PIN_LENGTH})`);
-      return next;
+      return prev + d;
     });
     setPinError(null);
   };
 
   const backspace = () => {
-    setPin((prev) => {
-      const next = prev.slice(0, -1);
-      console.log(`[CancelOrder] backspace → pin="${next}" (${next.length}/${PIN_LENGTH})`);
-      return next;
-    });
+    setPin((prev) => prev.slice(0, -1));
     setPinError(null);
   };
 
   const clear = () => {
     setPin('');
     setPinError(null);
-    console.log(`[CancelOrder] clear → pin="" (0/${PIN_LENGTH})`);
   };
 
   // ── Confirm ──
@@ -118,7 +111,7 @@ export const CancelOrderModal: React.FC<CancelOrderModalProps> = ({
 
     setPinError(null);
     setIsVerifying(true);
-    console.log(`[CancelOrder] verifyStaffPin → workspaceId="${workspaceId}" pin="${pin}"`);
+    console.log(`[CancelOrder] verifying PIN → workspaceId="${workspaceId}"`);
 
     try {
       const result = await window.api.auth.verifyStaffPin(workspaceId, pin);

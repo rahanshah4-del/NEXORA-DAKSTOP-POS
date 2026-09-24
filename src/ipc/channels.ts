@@ -9,6 +9,8 @@ export const IPC_CHANNELS = {
   AUTH_LOAD_LOGIN_CREDS: 'auth:loadLoginCreds',
   AUTH_CLEAR_LOGIN_CREDS: 'auth:clearLoginCreds',
   AUTH_VERIFY_STAFF_PIN: 'auth:verifyStaffPin',
+  /** Main → renderer push: the main-process Firebase session was gained or lost. */
+  AUTH_STATE_CHANGED: 'auth:stateChanged',
 
   // Database
   DB_QUERY: 'db:query',

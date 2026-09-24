@@ -45,7 +45,9 @@ if (!gotTheLock) {
     registerIpcHandlers(mainWindow);
     setupAutoUpdater(mainWindow);
 
-    // Start the offline sync drain engine (drains sync_queue → Firestore).
+    // Arm the offline sync drain engine (drains sync_queue → Firestore).
+    // This only attaches the auth listener — the drain loop itself starts when
+    // Firebase reports a signed-in user and stops again on sign-out.
     startSyncDrain();
 
     const menu = buildAppMenu(mainWindow);

@@ -8,6 +8,37 @@ import {
 let mainWindowRef: BrowserWindow | null = null;
 // Active Firestore menuItems listener (single subscription, replaced on re-subscribe).
 let menuItemsUnsubscribe: (() => void) | null = null;
+// Main → renderer auth bridge (single subscription for the app's lifetime).
+let authStateUnsubscribe: (() => void) | null = null;
+
+/**
+ * Push main-process Firebase auth transitions to the renderer.
+ *
+ * The main process holds the only real Firebase session, so if it drops while
+ * the app is running the renderer would otherwise keep an unlocked UI on
+ * screen while every cloud call silently fails.
+ *
+ * Subscribed exactly once: registerIpcHandlers() runs again on macOS
+ * 'activate', which reassigns mainWindowRef, so the callback reads that ref
+ * lazily instead of capturing a window that may already be destroyed.
+ */
+function attachAuthStateBridge(): void {
+  if (authStateUnsubscribe) return;
+
+  import('../firebase/auth')
+    .then(({ onAuthChange }) => {
+      authStateUnsubscribe = onAuthChange((user) => {
+        // Minimal payload — never a token, email or any other credential.
+        const state = { signedIn: user !== null, uid: user?.uid ?? null };
+        const win = mainWindowRef;
+        if (!win || win.isDestroyed()) return;
+        try {
+          win.webContents.send(IPC_CHANNELS.AUTH_STATE_CHANGED, state);
+        } catch { /* window torn down mid-send — non-critical */ }
+      });
+    })
+    .catch((err) => console.error('[Auth] Failed to attach auth state bridge:', err));
+}
 
 // ── Money helpers ──
 // The SQLite schema stores monetary amounts in cents (matches sync-drain.ts),
@@ -21,6 +52,7 @@ function fromCents(cents: unknown): number {
 
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   mainWindowRef = mainWindow;
+  attachAuthStateBridge();
 
   // Window Controls
   ipcMain.handle(IPC_CHANNELS.WINDOW_MINIMIZE, () => {

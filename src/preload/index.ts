@@ -19,6 +19,15 @@ const api = {
       ipcRenderer.invoke(IPC_CHANNELS.AUTH_CLEAR_LOGIN_CREDS),
     verifyStaffPin: (workspaceId: string, pin: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.AUTH_VERIFY_STAFF_PIN, { workspaceId, pin }),
+    onStateChanged: (callback: (state: { signedIn: boolean; uid: string | null }) => void) => {
+      const handler = (
+        _event: Electron.IpcRendererEvent,
+        state: { signedIn: boolean; uid: string | null },
+      ) => callback(state);
+      ipcRenderer.on(IPC_CHANNELS.AUTH_STATE_CHANGED, handler);
+      // Remove the exact wrapper that was registered — not the bare callback.
+      return () => { ipcRenderer.removeListener(IPC_CHANNELS.AUTH_STATE_CHANGED, handler); };
+    },
   },
   db: {
     query: (sql: string, params?: unknown[]) =>
