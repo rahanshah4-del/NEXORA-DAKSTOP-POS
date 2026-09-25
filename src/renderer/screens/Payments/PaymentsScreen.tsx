@@ -20,7 +20,8 @@ import { ScreenEmptyState } from '../components/ScreenStates';
 import { TableSkeleton } from '../components/SkeletonLoader';
 import { ConfirmationDialog } from '@/components/shared/ConfirmationDialog';
 import { formatCurrency } from '@/utils/formatters';
-import { useCurrencySymbol } from '@/hooks/useCurrency';
+import { useWorkspaceCurrencyValue } from '@/hooks/useWorkspaceCurrency';
+import { formatWorkspaceMoney, getWorkspaceSymbol } from '@/utils/workspaceMoney';
 import {
   Plus,
   Receipt,
@@ -86,7 +87,13 @@ export const PaymentsScreen: React.FC = () => {
     clearError,
   } = usePayments();
 
-  const currSymbol = useCurrencySymbol();
+  const { currencyCode, currencySymbol: currencyOverride } = useWorkspaceCurrencyValue();
+  /** Bare symbol, for input labels like "Amount (Rs)". */
+  const currSymbol = getWorkspaceSymbol(currencyCode, currencyOverride);
+  /** Amounts already in major units (rupees). */
+  const money = (amount: number) => formatWorkspaceMoney(amount, currencyCode, currencyOverride);
+  /** Amounts stored in paise/cents by the Firestore schema. */
+  const moneyFromCents = (cents: number) => money((cents ?? 0) / 100);
 
   // ── Modals ──
   const [showRecord, setShowRecord] = useState(false);
@@ -239,8 +246,7 @@ export const PaymentsScreen: React.FC = () => {
             Total Payments
           </div>
           <p className="text-lg font-bold text-content">
-            {currSymbol}
-            {(totals.totalAmount / 100).toLocaleString('en-IN')}
+            {moneyFromCents(totals.totalAmount)}
           </p>
           <p className="text-[10px] text-content-tertiary mt-0.5">
             {payments.length} transaction{payments.length !== 1 ? 's' : ''}
@@ -252,8 +258,7 @@ export const PaymentsScreen: React.FC = () => {
             Total Tips
           </div>
           <p className="text-lg font-bold text-success">
-            {currSymbol}
-            {(totals.totalTips / 100).toLocaleString('en-IN')}
+            {moneyFromCents(totals.totalTips)}
           </p>
         </Card>
         <Card padding="lg">
@@ -346,8 +351,7 @@ export const PaymentsScreen: React.FC = () => {
               header: 'Amount',
               accessor: (p) => (
                 <span className="text-xs font-semibold">
-                  {currSymbol}
-                  {((p.amountCents ?? 0) / 100).toLocaleString('en-IN')}
+                  {moneyFromCents(p.amountCents ?? 0)}
                 </span>
               ),
             },
@@ -357,8 +361,7 @@ export const PaymentsScreen: React.FC = () => {
               accessor: (p) =>
                 (p.tipCents ?? 0) > 0 ? (
                   <span className="text-xs text-success">
-                    {currSymbol}
-                    {((p.tipCents ?? 0) / 100).toLocaleString('en-IN')}
+                    {moneyFromCents(p.tipCents ?? 0)}
                   </span>
                 ) : (
                   <span className="text-xs text-content-tertiary">—</span>
@@ -448,7 +451,7 @@ export const PaymentsScreen: React.FC = () => {
           />
           <div className="grid grid-cols-2 gap-4">
             <Input
-              label="Amount (₹)"
+              label={`Amount (${currSymbol})`}
               type="number"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
@@ -463,7 +466,7 @@ export const PaymentsScreen: React.FC = () => {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <Input
-              label="Tip (₹, optional)"
+              label={`Tip (${currSymbol}, optional)`}
               type="number"
               value={tip}
               onChange={(e) => setTip(e.target.value)}

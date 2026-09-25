@@ -7,6 +7,7 @@
  */
 
 import { EscposBuilder, type ReceiptSection } from './escpos-builder';
+import { formatMoneyPrintable } from '../../utils/printable-money';
 import type { OrderPayload, PrinterConfig } from './types';
 
 export interface TemplateResult {
@@ -16,18 +17,13 @@ export interface TemplateResult {
 
 // ── Helpers ──
 
-function fmt(symbol: string, amount: number): string {
-  return `${symbol}${amount.toLocaleString('en-IN')}`;
-}
-
-const CURRENCY_SYMBOLS: Record<string, string> = {
-  INR: '₹', USD: '$', EUR: '€', GBP: '£', AED: 'د.إ',
-  AUD: 'A$', CAD: 'C$', SGD: 'S$', SAR: '﷼', JPY: '¥',
-  CNY: '¥', PKR: 'Rs', BDT: '৳', LKR: 'රු', NPR: 'रू',
-};
-
-function symbolFor(currency?: string): string {
-  return CURRENCY_SYMBOLS[currency || ''] || currency || '₹';
+/**
+ * Money on a receipt is ASCII-only. The old local symbol map defaulted to "₹",
+ * which the ASCII transport turned into the digit 9; formatMoneyPrintable
+ * falls back to the ISO code instead of emitting anything non-ASCII.
+ */
+function moneyFor(info?: OrderPayload['restaurantInfo']) {
+  return (amount: number) => formatMoneyPrintable(amount, info?.currency, info?.currencySymbol);
 }
 
 function today(): string {
@@ -173,7 +169,7 @@ export function buildBillReceipt(
 ): TemplateResult {
   const info = data.restaurantInfo;
   const name = info?.name || 'Nexora Solution';
-  const sym = symbolFor(info?.currency);
+  const money = moneyFor(info);
   const b = new EscposBuilder(paperWidth);
   const sc: ReceiptSection[] = [];
 
@@ -244,11 +240,11 @@ export function buildBillReceipt(
 
     b.line(`  ${name}`);
     b.boldOn();
-    b.row(`     ${qty} x ${fmt(sym, price)}`, fmt(sym, lineTotal));
+    b.row(`     ${qty} x ${money(price)}`, money(lineTotal));
     b.boldOff();
 
     sc.push({ type: 'item', text: name });
-    sc.push({ type: 'item-row', qty: String(qty), price: fmt(sym, price), lineTotal: fmt(sym, lineTotal) });
+    sc.push({ type: 'item-row', qty: String(qty), price: money(price), lineTotal: money(lineTotal) });
   }
 
   b.dashedLine();
@@ -256,13 +252,13 @@ export function buildBillReceipt(
 
   // ── Totals ──
   const subtotal = totals?.subtotal ?? data.total ?? 0;
-  b.row('Subtotal', fmt(sym, subtotal));
-  sc.push({ type: 'row', left: 'Subtotal', right: fmt(sym, subtotal) });
+  b.row('Subtotal', money(subtotal));
+  sc.push({ type: 'row', left: 'Subtotal', right: money(subtotal) });
 
   const discount = totals?.discount ?? 0;
   if (discount > 0) {
-    b.row(`Discount (${data.discountPercent ?? 0}%)`, `-${fmt(sym, discount)}`);
-    sc.push({ type: 'row', left: `Discount (${data.discountPercent ?? 0}%)`, right: `-${fmt(sym, discount)}` });
+    b.row(`Discount (${data.discountPercent ?? 0}%)`, `-${money(discount)}`);
+    sc.push({ type: 'row', left: `Discount (${data.discountPercent ?? 0}%)`, right: `-${money(discount)}` });
   }
 
   const tax = totals?.tax ?? 0;
@@ -271,20 +267,20 @@ export function buildBillReceipt(
     // split only for legacy payloads that don't carry the split.
     const cgst = (totals as any)?.cgst ?? Math.round(tax / 2);
     const sgst = (totals as any)?.sgst ?? (tax - cgst);
-    b.row(`CGST ${info?.cgstRate || '0'}%`, fmt(sym, cgst));
-    b.row(`SGST ${info?.sgstRate || '0'}%`, fmt(sym, sgst));
-    sc.push({ type: 'row', left: `CGST ${info?.cgstRate || '0'}%`, right: fmt(sym, cgst) });
-    sc.push({ type: 'row', left: `SGST ${info?.sgstRate || '0'}%`, right: fmt(sym, sgst) });
+    b.row(`CGST ${info?.cgstRate || '0'}%`, money(cgst));
+    b.row(`SGST ${info?.sgstRate || '0'}%`, money(sgst));
+    sc.push({ type: 'row', left: `CGST ${info?.cgstRate || '0'}%`, right: money(cgst) });
+    sc.push({ type: 'row', left: `SGST ${info?.sgstRate || '0'}%`, right: money(sgst) });
   }
 
   // ── TOTAL — the most prominent line on the receipt ──
   b.thickLine();
   b.boldOn().doubleOn();
-  b.row('TOTAL', fmt(sym, data.total ?? 0));
+  b.row('TOTAL', money(data.total ?? 0));
   b.doubleOff().boldOff();
   b.thickLine();
 
-  sc.push({ type: 'total-line', left: 'TOTAL', right: fmt(sym, data.total ?? 0) });
+  sc.push({ type: 'total-line', left: 'TOTAL', right: money(data.total ?? 0) });
 
   // ── Payment breakdown ──
   if (data.walletAmountUsed && data.walletAmountUsed > 0) {
@@ -292,17 +288,17 @@ export function buildBillReceipt(
     b.feed();
     b.boldCentered('— PAYMENT BREAKDOWN —');
     b.dashedLine();
-    b.row('Wallet', fmt(sym, data.walletAmountUsed));
+    b.row('Wallet', money(data.walletAmountUsed));
     if (remaining > 0) {
-      b.row('Cash / Card', fmt(sym, remaining));
+      b.row('Cash / Card', money(remaining));
     }
 
     sc.push({ type: 'blank' });
     sc.push({ type: 'bold-centered', text: '— PAYMENT BREAKDOWN —' });
     sc.push({ type: 'separator' });
-    sc.push({ type: 'row', left: 'Wallet', right: fmt(sym, data.walletAmountUsed) });
+    sc.push({ type: 'row', left: 'Wallet', right: money(data.walletAmountUsed) });
     if (remaining > 0) {
-      sc.push({ type: 'row', left: 'Cash / Card', right: fmt(sym, remaining) });
+      sc.push({ type: 'row', left: 'Cash / Card', right: money(remaining) });
     }
   }
 
@@ -343,7 +339,7 @@ export function buildBillReceipt(
     b.centered(`Bill: ${info?.billPrefix || ''}${data.orderNumber}`);
     b.feed();
     b.boldOn().doubleOn();
-    b.centered(fmt(sym, data.total ?? 0));
+    b.centered(money(data.total ?? 0));
     b.doubleOff().boldOff();
     b.feed();
     b.centered('Thank you!');
@@ -356,7 +352,7 @@ export function buildBillReceipt(
     sc.push({ type: 'headline', text: name });
     sc.push({ type: 'centered', text: `Bill: ${info?.billPrefix || ''}${data.orderNumber}` });
     sc.push({ type: 'blank' });
-    sc.push({ type: 'bold-centered', text: fmt(sym, data.total ?? 0) });
+    sc.push({ type: 'bold-centered', text: money(data.total ?? 0) });
     sc.push({ type: 'blank' });
     sc.push({ type: 'centered', text: 'Thank you!' });
   }

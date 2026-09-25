@@ -1,4 +1,4 @@
-import { BrowserWindow, screen, app } from 'electron';
+import { BrowserWindow, screen, app, shell } from 'electron';
 import { join } from 'path';
 import { existsSync, readFileSync, mkdirSync, writeFileSync } from 'fs';
 import { dirname } from 'path';
@@ -89,6 +89,52 @@ export function persistWindowState(win: BrowserWindow): void {
   }
 }
 
+/**
+ * Lock a window down so renderer content cannot navigate the app away from
+ * itself or spawn a second window that inherits the preload bridge.
+ *
+ *  - will-navigate: only the app's own origin is allowed. In dev that is the
+ *    Vite server; in production it is the packaged file:// bundle. Anything
+ *    else is cancelled, and http(s) targets are handed to the real browser.
+ *  - window.open / target=_blank: always denied. http(s) opens externally,
+ *    every other scheme (file:, javascript:, custom protocols) is dropped.
+ */
+function applyNavigationGuards(win: BrowserWindow): void {
+  const isDev = process.env.NODE_ENV === 'development' || !!process.env.ELECTRON_RENDERER_URL;
+  const devOrigin = (() => {
+    try { return new URL(process.env.ELECTRON_RENDERER_URL || 'http://localhost:5173').origin; }
+    catch { return 'http://localhost:5173'; }
+  })();
+
+  const isInternal = (raw: string): boolean => {
+    let url: URL;
+    try { url = new URL(raw); } catch { return false; }
+    if (isDev && url.origin === devOrigin) return true;
+    // Packaged app: the renderer is loaded from disk, so file:// is its origin.
+    return !isDev && url.protocol === 'file:';
+  };
+
+  const openExternally = (raw: string): void => {
+    let url: URL;
+    try { url = new URL(raw); } catch { return; }
+    // Only ever hand http(s) to the OS — never file:, javascript: or custom schemes.
+    if (url.protocol === 'http:' || url.protocol === 'https:') {
+      shell.openExternal(url.toString()).catch(() => { /* user-facing no-op */ });
+    }
+  };
+
+  win.webContents.on('will-navigate', (event, targetUrl) => {
+    if (isInternal(targetUrl)) return;
+    event.preventDefault();
+    openExternally(targetUrl);
+  });
+
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    openExternally(url);
+    return { action: 'deny' };
+  });
+}
+
 export function createMainWindow(): BrowserWindow {
   const savedState = loadWindowState();
   const preloadPath = join(__dirname, '../preload/index.js');
@@ -112,6 +158,8 @@ export function createMainWindow(): BrowserWindow {
       webSecurity: true,
     },
   });
+
+  applyNavigationGuards(win);
 
   win.on('ready-to-show', () => {
     if (savedState.isMaximized) {

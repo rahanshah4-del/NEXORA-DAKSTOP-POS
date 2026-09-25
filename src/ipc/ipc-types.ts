@@ -44,13 +44,9 @@ export interface IpcChannelMap {
       staffRole: string;
     } | null;
   };
-  [IPC_CHANNELS.DB_QUERY]: {
-    request: { sql: string; params?: unknown[] };
-    response: unknown[];
-  };
-  [IPC_CHANNELS.DB_EXECUTE]: {
-    request: { sql: string; params?: unknown[] };
-    response: { changes: number; lastInsertRowid: number };
+  [IPC_CHANNELS.DB_GET_MAX_ORDER_NUMBER]: {
+    request: void;
+    response: number;
   };
   [IPC_CHANNELS.APP_GET_VERSION]: {
     request: void;
@@ -133,6 +129,23 @@ export interface IpcChannelMap {
   [IPC_CHANNELS.FIRESTORE_TABLES_LIST]: {
     request: { workspaceId: string };
     response: { success: boolean; tables?: Record<string, unknown>[]; error?: string };
+  };
+
+  [IPC_CHANNELS.FIRESTORE_WORKSPACE_GET]: {
+    request: { workspaceId: string };
+    response: {
+      success: boolean;
+      data?: { currency: string | null; currencySymbol: string; exists: boolean };
+      error?: string;
+    };
+  };
+  [IPC_CHANNELS.FIRESTORE_WORKSPACE_LISTEN]: {
+    request: { workspaceId: string };
+    response: { success: boolean; error?: string };
+  };
+  [IPC_CHANNELS.FIRESTORE_WORKSPACE_LISTEN_STOP]: {
+    request: Record<string, never>;
+    response: { success: boolean };
   };
 
   [IPC_CHANNELS.FIRESTORE_MENU_ITEMS_LIST]: {

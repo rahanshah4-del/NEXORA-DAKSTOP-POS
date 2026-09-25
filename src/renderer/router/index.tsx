@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react';
-import { getCurrencySymbol } from '@/utils/formatters';
+import { useWorkspaceCurrencyValue } from '@/hooks/useWorkspaceCurrency';
+import { formatWorkspaceMoney, getWorkspaceSymbol } from '@/utils/workspaceMoney';
 import { createHashRouter, Navigate } from 'react-router-dom';
 import { AppLayout } from '@/layouts/AppLayout';
 import { AuthLayout } from '@/layouts/AuthLayout';
@@ -65,10 +66,11 @@ import { Save, Plus, Wallet, DollarSign, Calendar, Clock, AlertTriangle, Check, 
 import { cn } from '@/utils/cn';
 import { mapMenuItems, extractCategories } from '@/utils/menu-items';
 import { userFriendlyError } from '@/utils/error-helper';
-import { useCurrencySymbol } from '@/hooks/useCurrency';
 
 function MenuConfigPage() {
-  const currSymbol = useCurrencySymbol();
+  const { currencyCode, currencySymbol: currencyOverride } = useWorkspaceCurrencyValue();
+  const currSymbol = getWorkspaceSymbol(currencyCode, currencyOverride);
+  const money = (amount: number) => formatWorkspaceMoney(amount, currencyCode, currencyOverride);
   const { items, categories, addItem, updateItem, removeItem, toggleActive, addCategory } = useMenuStore();
   const { tables } = useTableStore();
 
@@ -336,7 +338,7 @@ function MenuConfigPage() {
                 autoFocus
               />
               <Input
-                type="number" placeholder="Price (₹)"
+                type="number" placeholder={`Price (${currSymbol})`}
                 value={newItem.price || ''}
                 onChange={(e) => setNewItem({ ...newItem, price: Number(e.target.value) })}
                 className="h-8 text-xs w-24"
@@ -453,7 +455,7 @@ function MenuConfigPage() {
                           className="h-7 w-20 px-2 text-[10px] border border-border rounded"
                         />
                       ) : (
-                        <span className="text-[11px] font-semibold text-primary">{currSymbol}{item.price}</span>
+                        <span className="text-[11px] font-semibold text-primary">{money(item.price)}</span>
                       )}
                     </td>
                     <td className="px-3 py-2">
@@ -568,8 +570,9 @@ function expenseStatusBadge(approvalStatus: string) {
 }
 
 function ExpensePage() {
-  const currency = useSettingsStore((s) => s.currency);
-  const currSymbol = getCurrencySymbol(currency);
+  const { currencyCode, currencySymbol: currencyOverride } = useWorkspaceCurrencyValue();
+  const currSymbol = getWorkspaceSymbol(currencyCode, currencyOverride);
+  const money = (amount: number) => formatWorkspaceMoney(amount, currencyCode, currencyOverride);
   const staffProfile = useAuthStore((s) => s.staffProfile);
   const wsId = staffProfile?.workspaceId;
   const staffName = staffProfile?.staffName || 'Staff';
@@ -640,7 +643,7 @@ function ExpensePage() {
         title: formTitle.trim() || formCategory,
         category: formCategory,
         amount: Number(formAmount),
-        currency: currency || 'PKR',
+        currency: currencyCode,
         paymentMethod: formPaymentMethod,
         paidBy: formPaidBy.trim() || staffName,
         notes: formNotes.trim() || undefined,
@@ -751,15 +754,15 @@ function ExpensePage() {
       <div className="grid grid-cols-3 gap-3">
         <Card padding="lg">
           <p className="text-[10px] text-content-tertiary">Total Expenses</p>
-          <p className="text-lg font-bold text-content">{currSymbol}{totalExpenses.toLocaleString('en-IN')}</p>
+          <p className="text-lg font-bold text-content">{money(totalExpenses)}</p>
         </Card>
         <Card padding="lg">
           <p className="text-[10px] text-content-tertiary">This Month</p>
-          <p className="text-lg font-bold text-warning">{currSymbol}{thisMonthExpenses.toLocaleString('en-IN')}</p>
+          <p className="text-lg font-bold text-warning">{money(thisMonthExpenses)}</p>
         </Card>
         <Card padding="lg">
           <p className="text-[10px] text-content-tertiary">Pending Approval</p>
-          <p className="text-lg font-bold text-danger">{currSymbol}{pendingAmount.toLocaleString('en-IN')}</p>
+          <p className="text-lg font-bold text-danger">{money(pendingAmount)}</p>
         </Card>
       </div>
 
@@ -811,7 +814,7 @@ function ExpensePage() {
             {
               key: 'amount',
               header: 'Amount',
-              accessor: (r: FirestoreExpense) => <span className="text-xs font-semibold">{currSymbol}{r.amount.toLocaleString('en-IN')}</span>,
+              accessor: (r: FirestoreExpense) => <span className="text-xs font-semibold">{money(r.amount)}</span>,
             },
             {
               key: 'paidBy',
@@ -842,7 +845,10 @@ function ExpensePage() {
 }
 
 function CloseDayPage() {
-  const currSymbol = getCurrencySymbol(useSettingsStore.getState().currency);  const [confirmed, setConfirmed] = useState(false);
+  const { currencyCode, currencySymbol: currencyOverride } = useWorkspaceCurrencyValue();
+  const currSymbol = getWorkspaceSymbol(currencyCode, currencyOverride);
+  const money = (amount: number) => formatWorkspaceMoney(amount, currencyCode, currencyOverride);
+  const [confirmed, setConfirmed] = useState(false);
   return (
     <div className="space-y-4">
       <h2 className="text-base font-bold text-content">Close Day</h2>
@@ -850,7 +856,7 @@ function CloseDayPage() {
       <Card>
         <CardHeader><CardTitle>Day Summary</CardTitle></CardHeader>
         <div className="grid grid-cols-3 gap-3">
-          {[{l:'Total Orders',v:'42'},{l:'Revenue',v:'₹24,500'},{l:'Expenses',v:'₹10,800'}].map((x)=>(<div key={x.l}><p className="text-[10px] text-content-tertiary">{x.l}</p><p className="text-sm font-bold">{x.v}</p></div>))}
+          {[{l:'Total Orders',v:'42'},{l:'Revenue',v:money(24500)},{l:'Expenses',v:money(10800)}].map((x)=>(<div key={x.l}><p className="text-[10px] text-content-tertiary">{x.l}</p><p className="text-sm font-bold">{x.v}</p></div>))}
         </div>
       </Card>
       {!confirmed ? (
@@ -865,7 +871,10 @@ function CloseDayPage() {
 }
 
 function CloseShiftPage() {
-  const currSymbol = getCurrencySymbol(useSettingsStore.getState().currency);  const [confirmed, setConfirmed] = useState(false);
+  const { currencyCode, currencySymbol: currencyOverride } = useWorkspaceCurrencyValue();
+  const currSymbol = getWorkspaceSymbol(currencyCode, currencyOverride);
+  const money = (amount: number) => formatWorkspaceMoney(amount, currencyCode, currencyOverride);
+  const [confirmed, setConfirmed] = useState(false);
   return (
     <div className="space-y-4">
       <h2 className="text-base font-bold text-content">Close Shift</h2>
@@ -873,7 +882,7 @@ function CloseShiftPage() {
       <Card>
         <CardHeader><CardTitle>Shift Summary</CardTitle></CardHeader>
         <div className="grid grid-cols-3 gap-3">
-          {[{l:'Orders Handled',v:'18'},{l:'Cash Collected',v:'₹12,400'},{l:'UPI/Card',v:'₹8,100'}].map((x)=>(<div key={x.l}><p className="text-[10px] text-content-tertiary">{x.l}</p><p className="text-sm font-bold">{x.v}</p></div>))}
+          {[{l:'Orders Handled',v:'18'},{l:'Cash Collected',v:money(12400)},{l:'UPI/Card',v:money(8100)}].map((x)=>(<div key={x.l}><p className="text-[10px] text-content-tertiary">{x.l}</p><p className="text-sm font-bold">{x.v}</p></div>))}
         </div>
       </Card>
       {!confirmed ? (
@@ -912,8 +921,9 @@ interface WalletTx {
 }
 
 function WalletPage() {
-  const currency = useSettingsStore((s) => s.currency);
-  const currSymbol = getCurrencySymbol(currency);
+  const { currencyCode, currencySymbol: currencyOverride } = useWorkspaceCurrencyValue();
+  const currSymbol = getWorkspaceSymbol(currencyCode, currencyOverride);
+  const money = (amount: number) => formatWorkspaceMoney(amount, currencyCode, currencyOverride);
   const staffProfile = useAuthStore((s) => s.staffProfile);
   const wsId = staffProfile?.workspaceId;
   const staffRole = staffProfile?.staffRole || '';
@@ -1032,7 +1042,7 @@ function WalletPage() {
     const amt = Number(settleAmount);
     const cust = customers.find((c) => c.id === settleCustomerId);
     if (!amt || amt <= 0) { setSettleError('Enter a valid amount'); return; }
-    if (cust && amt > cust.walletDue) { setSettleError(`Amount exceeds outstanding due (${currSymbol}${cust.walletDue})`); return; }
+    if (cust && amt > cust.walletDue) { setSettleError(`Amount exceeds outstanding due (${money(cust.walletDue)})`); return; }
     setSettleError(null);
     setSettleSubmitting(true);
     try {
@@ -1156,7 +1166,7 @@ function WalletPage() {
                 >
                   <option value="">Select customer…</option>
                   {customers.filter((c) => c.walletDue > 0).map((c) => (
-                    <option key={c.id} value={c.id}>{c.name} — {currSymbol}{c.walletDue} due</option>
+                    <option key={c.id} value={c.id}>{c.name} — {money(c.walletDue)} due</option>
                   ))}
                 </select>
               </div>
@@ -1179,11 +1189,11 @@ function WalletPage() {
       <div className="grid grid-cols-3 gap-3">
         <Card padding="lg">
           <p className="text-[10px] text-content-tertiary">Total Balance</p>
-          <p className="text-lg font-bold text-success">{currSymbol}{totalBalance.toLocaleString('en-IN')}</p>
+          <p className="text-lg font-bold text-success">{money(totalBalance)}</p>
         </Card>
         <Card padding="lg">
           <p className="text-[10px] text-content-tertiary">Total Dues</p>
-          <p className="text-lg font-bold text-danger">{currSymbol}{totalDues.toLocaleString('en-IN')}</p>
+          <p className="text-lg font-bold text-danger">{money(totalDues)}</p>
         </Card>
         <Card padding="lg">
           <p className="text-[10px] text-content-tertiary">Customers</p>
@@ -1222,10 +1232,10 @@ function WalletPage() {
                   <button onClick={() => selectCustomer(r)} className="text-xs font-medium text-primary hover:underline text-left">{r.name}</button>
                 )},
                 { key: 'phone', header: 'Phone', accessor: (r: WalletCustomer) => <span className="text-xs">{r.phone || '—'}</span> },
-                { key: 'walletCredit', header: 'Wallet', accessor: (r: WalletCustomer) => <span className="text-xs font-semibold text-success">{currSymbol}{r.walletCredit.toLocaleString('en-IN')}</span> },
+                { key: 'walletCredit', header: 'Wallet', accessor: (r: WalletCustomer) => <span className="text-xs font-semibold text-success">{money(r.walletCredit)}</span> },
                 { key: 'walletDue', header: 'Dues', accessor: (r: WalletCustomer) => (
                   <div className="flex items-center gap-2">
-                    <span className={r.walletDue > 0 ? 'text-xs font-semibold text-danger' : 'text-xs'}>{r.walletDue > 0 ? `${currSymbol}${r.walletDue.toLocaleString('en-IN')}` : '—'}</span>
+                    <span className={r.walletDue > 0 ? 'text-xs font-semibold text-danger' : 'text-xs'}>{r.walletDue > 0 ? `${money(r.walletDue)}` : '—'}</span>
                     {isOwner && r.walletDue > 0 && (
                       <button onClick={() => { setSettleCustomerId(r.id); setSettleAmount(String(r.walletDue)); setShowSettleForm(true); }}
                         className="text-[9px] text-primary hover:underline whitespace-nowrap">Settle</button>
@@ -1255,8 +1265,8 @@ function WalletPage() {
                   </div>
                   <div className="text-right">
                     <p className="text-[10px] text-content-tertiary">Balance</p>
-                    <p className="text-xs font-bold text-success">{currSymbol}{selectedCustomer.walletCredit.toLocaleString('en-IN')}</p>
-                    {selectedCustomer.walletDue > 0 && <p className="text-[10px] font-bold text-danger">Due: {currSymbol}{selectedCustomer.walletDue.toLocaleString('en-IN')}</p>}
+                    <p className="text-xs font-bold text-success">{money(selectedCustomer.walletCredit)}</p>
+                    {selectedCustomer.walletDue > 0 && <p className="text-[10px] font-bold text-danger">Due: {money(selectedCustomer.walletDue)}</p>}
                   </div>
                 </div>
 
@@ -1278,7 +1288,7 @@ function WalletPage() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
                             <span className={cn('text-[9px] font-bold px-1.5 py-0.5 rounded', tx.type === 'credit' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700')}>
-                              {tx.type === 'credit' ? '+' : '-'}{currSymbol}{tx.amount.toLocaleString('en-IN')}
+                              {tx.type === 'credit' ? '+' : '-'}{money(tx.amount)}
                             </span>
                             <span className="text-[10px] font-medium text-content truncate">{tx.source?.replace(/_/g, ' ')}</span>
                           </div>
@@ -1286,7 +1296,7 @@ function WalletPage() {
                         </div>
                         <div className="text-right shrink-0 ml-3">
                           <p className="text-[9px] text-content-secondary">{tx.createdAt ? new Date(tx.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : '—'}</p>
-                          <p className="text-[8px] text-content-tertiary">Bal: {currSymbol}{(tx.balanceAfter ?? 0).toLocaleString('en-IN')}</p>
+                          <p className="text-[8px] text-content-tertiary">Bal: {money((tx.balanceAfter ?? 0))}</p>
                         </div>
                       </div>
                     ))}
@@ -1302,7 +1312,10 @@ function WalletPage() {
 }
 
 function UserPage() {
-  const currSymbol = getCurrencySymbol(useSettingsStore.getState().currency);  const users = [
+  const { currencyCode, currencySymbol: currencyOverride } = useWorkspaceCurrencyValue();
+  const currSymbol = getWorkspaceSymbol(currencyCode, currencyOverride);
+  const money = (amount: number) => formatWorkspaceMoney(amount, currencyCode, currencyOverride);
+  const users = [
     {id:'u1',name:'Admin',role:'Administrator',email:'admin@nexora.com',status:'Active' as const},
     {id:'u2',name:'Rahul S.',role:'Waiter',email:'rahul@nexora.com',status:'Active' as const},
     {id:'u3',name:'Priya M.',role:'Chef',email:'priya@nexora.com',status:'Active' as const},
@@ -1491,12 +1504,10 @@ export const router = createHashRouter([
             element: <Navigate to="/" replace />,
           },
           {
+            // Dashboard renders its own IconBar/header/footer, so mounting it
+            // inside AppLayout doubled the chrome. It lives only at "/" now.
             path: 'dashboard',
-            element: (
-              <SuspenseWrapper>
-                <Dashboard />
-              </SuspenseWrapper>
-            ),
+            element: <Navigate to="/" replace />,
           },
           {
             path: 'customers',

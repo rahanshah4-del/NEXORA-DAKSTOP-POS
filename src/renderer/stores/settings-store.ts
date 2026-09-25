@@ -31,6 +31,10 @@ export interface SettingsState {
   email: string;
   address: string;
   currency: string;
+  /** Last dashboard period the user selected; survives restart. */
+  dashboardPeriod: string;
+  /** Cached workspace symbol override; "" means use the Intl default. */
+  currencySymbol: string;
 
   // Table Settings
   billDetailsOnTable: boolean;
@@ -110,7 +114,9 @@ const defaults: Omit<SettingsState, 'update' | 'reset' | 'getNextOrderNumber'> =
   phone: '+91-11-2345-6789',
   email: 'support@nexorasolution.online',
   address: '123, Connaught Place, New Delhi - 110001',
-  currency: 'INR',
+  currency: 'PKR',
+  dashboardPeriod: 'today',
+  currencySymbol: '',
 
   billDetailsOnTable: true,
   customerNameOnTable: true,

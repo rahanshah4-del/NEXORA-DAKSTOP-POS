@@ -1,8 +1,8 @@
-import { useCurrencySymbol } from '@/hooks/useCurrency';
+import { useWorkspaceCurrencyValue } from '@/hooks/useWorkspaceCurrency';
+import { formatWorkspaceMoney } from '@/utils/workspaceMoney';
 import { useSettingsStore } from '@/stores/settings-store';
 import { useTableStore } from '@/stores/table-store';
 import type { TableData } from '@/stores/table-store';
-import { getCurrencySymbol } from '@/utils/formatters';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/utils/cn';
@@ -16,7 +16,9 @@ import { IconBar } from '@/components/layout/IconBar';
 const sections = ['All', 'Indoor', 'Outdoor', 'Private', 'Terrace'];
 
 export default function Tables() {
-  const currSymbol = useCurrencySymbol();
+  const { currencyCode, currencySymbol: currencyOverride } = useWorkspaceCurrencyValue();
+  /** All amounts on this screen are already in major units (rupees). */
+  const money = (amount: number) => formatWorkspaceMoney(amount, currencyCode, currencyOverride);
   const navigate = useNavigate();
   const tables = useTableStore((s) => s.tables);
   const [activeSection, setActiveSection] = useState('All');
@@ -45,52 +47,52 @@ export default function Tables() {
   };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#f8faf9] select-none font-sans">
+    <div className="flex h-screen w-screen overflow-hidden bg-pos-ground select-none font-sans">
       <IconBar />
 
       {/* MAIN */}
-      <div className="flex flex-1 flex-col min-w-0 ml-[56px]">
+      <div className="flex flex-1 flex-col min-w-0 ml-rail">
         {/* Header */}
-        <header className="flex items-center h-[48px] px-4 bg-white border-b border-[#e2e8e4] shrink-0">
-          <h1 className="text-[14px] font-bold text-[#111814] tracking-tight">Nexora Solution</h1>
-          <span className="h-4 w-px bg-[#dee2e6] mx-2.5" />
-          <span className="text-[11px] text-[#94a399] font-medium">Table Management</span>
+        <header className="flex items-center h-[48px] px-4 bg-pos-bar border-b border-pos-card-border shrink-0">
+          <h1 className="text-[14px] font-bold text-pos-ink tracking-tight">Nexora Solution</h1>
+          <span className="h-4 w-px bg-pos-card-border mx-2.5" />
+          <span className="text-[11px] text-pos-muted font-medium">Table Management</span>
           <div className="flex-1 drag-region h-full" />
           <div className="flex items-center gap-3 no-drag">
-            <span className="text-[11px] text-[#47554d] flex items-center gap-1.5"><Clock className="h-3.5 w-3.5 text-[#94a399]" />02:45 PM</span>
-            <div className="flex items-center gap-1.5 text-[11px] text-[#47554d]">
-              <div className="h-6 w-6 rounded-full bg-[#cceddb] flex items-center justify-center"><User className="h-3 w-3 text-[#0f7b47]" /></div>
-              Admin <ChevronDown className="h-3 w-3 text-[#94a399]" />
+            <span className="text-[11px] text-pos-muted flex items-center gap-1.5"><Clock className="h-3.5 w-3.5 text-pos-muted" />02:45 PM</span>
+            <div className="flex items-center gap-1.5 text-[11px] text-pos-muted">
+              <div className="h-6 w-6 rounded-full bg-pos-primary-soft flex items-center justify-center"><User className="h-3 w-3 text-pos-primary" /></div>
+              Admin <ChevronDown className="h-3 w-3 text-pos-muted" />
             </div>
             <div className="flex items-center ml-1">
-              <button className="h-7 w-9 flex items-center justify-center text-[#94a399] hover:text-[#47554d] hover:bg-[#f1f5f2] rounded transition-colors">─</button>
-              <button className="h-7 w-9 flex items-center justify-center text-[#94a399] hover:text-[#47554d] hover:bg-[#f1f5f2] rounded transition-colors">□</button>
-              <button className="h-7 w-9 flex items-center justify-center text-[#94a399] hover:text-white hover:bg-[#da3849] rounded transition-colors"><X className="h-3.5 w-3.5" /></button>
+              <button className="h-7 w-9 flex items-center justify-center text-pos-muted hover:text-pos-muted hover:bg-pos-ground rounded transition-colors">─</button>
+              <button className="h-7 w-9 flex items-center justify-center text-pos-muted hover:text-pos-muted hover:bg-pos-ground rounded transition-colors">□</button>
+              <button className="h-7 w-9 flex items-center justify-center text-pos-muted hover:text-white hover:bg-pos-cancel-fg rounded transition-colors"><X className="h-3.5 w-3.5" /></button>
             </div>
           </div>
         </header>
 
         {/* Sub-header */}
-        <div className="flex items-center h-[40px] px-3 bg-white border-b border-[#dee2e6] shrink-0 gap-2">
+        <div className="flex items-center h-[40px] px-3 bg-pos-bar border-b border-pos-card-border shrink-0 gap-2">
           <div className="flex items-center gap-1">
             {sections.map((sec) => (
               <button key={sec} onClick={() => setActiveSection(sec)}
                 className={cn('px-3 py-1.5 text-[10px] font-semibold rounded transition-colors',
-                  activeSection === sec ? 'bg-[#0f7b47] text-white' : 'text-[#47554d] hover:text-[#111814] hover:bg-[#f1f5f2]')}>{sec}</button>
+                  activeSection === sec ? 'bg-pos-primary text-white' : 'text-pos-muted hover:text-pos-ink hover:bg-pos-ground')}>{sec}</button>
             ))}
           </div>
           <div className="flex-1" />
-          <div className="flex items-center gap-1.5 text-[10px] text-[#47554d]">
-            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[#42b273]" />{available} Available</span>
+          <div className="flex items-center gap-1.5 text-[10px] text-pos-muted">
+            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-pos-primary" />{available} Available</span>
             <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-500" />{occupied} Occupied</span>
             <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-sky-500" />{reserved} Reserved</span>
           </div>
           <div className="relative">
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-[#94a399]" />
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-pos-muted" />
             <input type="text" placeholder="Find table..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-7 w-32 pl-7 pr-2 text-[10px] bg-[#f8faf9] border border-[#dee2e6] rounded text-[#111814] placeholder:text-[#94a399] focus:outline-none focus:ring-1 focus:ring-[#0f7b47]" />
+              className="h-7 w-32 pl-7 pr-2 text-[10px] bg-pos-bar border border-pos-card-border rounded text-pos-ink placeholder:text-pos-muted focus:outline-none focus:ring-1 focus:ring-pos-primary" />
           </div>
-          <button className="flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-semibold text-white bg-[#0f7b47] hover:bg-[#056638] rounded transition-colors"><Plus className="h-3 w-3" />Add Table</button>
+          <button className="flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-semibold text-white bg-pos-primary hover:bg-pos-primary-dark rounded transition-colors"><Plus className="h-3 w-3" />Add Table</button>
         </div>
 
         {/* Table Grid */}
@@ -110,7 +112,7 @@ export default function Tables() {
                   className={cn(
                     'relative text-left p-3 rounded-xl border-2 transition-all duration-150 cursor-pointer group',
                     'hover:shadow-md hover:-translate-y-0.5',
-                    isAvailable && 'bg-white border-[#42b273]/30 hover:border-[#42b273]',
+                    isAvailable && 'bg-white border-pos-primary/30 hover:border-pos-primary',
                     isOccupied && 'bg-amber-50/50 border-amber-300 hover:border-amber-400',
                     isReserved && 'bg-sky-50/30 border-sky-200 hover:border-sky-300',
                     isBilling && 'bg-red-50/30 border-red-300 hover:border-red-400',
@@ -118,45 +120,45 @@ export default function Tables() {
                 >
                   {/* Status dot */}
                   <span className={cn('absolute top-2.5 right-2.5 h-2.5 w-2.5 rounded-full',
-                    isAvailable && 'bg-[#42b273]',
+                    isAvailable && 'bg-pos-primary',
                     isOccupied && 'bg-amber-500 animate-pulse',
                     isReserved && 'bg-sky-500',
                     isBilling && 'bg-red-500')} />
 
                   {/* Name + Section */}
-                  <p className="text-[13px] font-bold text-[#111814] leading-tight">{table.name}</p>
-                  <p className="text-[9px] text-[#94a399] mt-0.5">{table.section}</p>
+                  <p className="text-[13px] font-bold text-pos-ink leading-tight">{table.name}</p>
+                  <p className="text-[9px] text-pos-muted mt-0.5">{table.section}</p>
 
                   {/* Capacity */}
-                  <div className="flex items-center gap-1 mt-2 text-[10px] text-[#47554d]">
+                  <div className="flex items-center gap-1 mt-2 text-[10px] text-pos-muted">
                     <UsersIcon className="h-3 w-3" />
                     <span>{table.capacity} seats</span>
                   </div>
 
                   {/* Occupied/Billing info */}
                   {(isOccupied || isBilling) && table.customer && (
-                    <div className="mt-2 pt-2 border-t border-[#e2e8e0] space-y-0.5">
-                      <p className="text-[10px] font-medium text-[#111814]">{table.customer}</p>
-                      <div className="flex items-center justify-between text-[9px] text-[#47554d]">
+                    <div className="mt-2 pt-2 border-t border-pos-card-border space-y-0.5">
+                      <p className="text-[10px] font-medium text-pos-ink">{table.customer}</p>
+                      <div className="flex items-center justify-between text-[9px] text-pos-muted">
                         <span>{table.orderId}</span>
-                        <span className="font-semibold">{currSymbol}{table.orderTotal?.toLocaleString('en-IN')}</span>
+                        <span className="font-semibold">{money(table.orderTotal ?? 0)}</span>
                       </div>
-                      <p className="text-[9px] text-[#94a399]">{table.time} • {table.guests} guests</p>
+                      <p className="text-[9px] text-pos-muted">{table.time} • {table.guests} guests</p>
                     </div>
                   )}
 
                   {/* Reserved */}
                   {isReserved && (
-                    <div className="mt-2 pt-2 border-t border-[#e2e8e0]">
+                    <div className="mt-2 pt-2 border-t border-pos-card-border">
                       <p className="text-[10px] text-sky-600 font-medium">Reserved</p>
                     </div>
                   )}
 
                   {/* Available */}
                   {isAvailable && (
-                    <div className="mt-2 pt-2 border-t border-[#e2e8e0]">
-                      <p className="text-[10px] text-[#42b273] font-medium">Click to reserve</p>
-                      <p className="text-[9px] text-[#94a399]">Double-click to open</p>
+                    <div className="mt-2 pt-2 border-t border-pos-card-border">
+                      <p className="text-[10px] text-pos-primary font-medium">Click to reserve</p>
+                      <p className="text-[9px] text-pos-muted">Double-click to open</p>
                     </div>
                   )}
                 </button>
@@ -166,7 +168,7 @@ export default function Tables() {
 
           {/* Empty state */}
           {filteredTables.length === 0 && (
-            <div className="flex items-center justify-center h-64 text-[#94a399]">
+            <div className="flex items-center justify-center h-64 text-pos-muted">
               <div className="text-center">
                 <LayoutGrid className="h-10 w-10 mx-auto mb-2 opacity-30" />
                 <p className="text-xs">
@@ -180,9 +182,9 @@ export default function Tables() {
         </div>
 
         {/* Bottom Bar */}
-        <footer className="flex items-center justify-between h-[32px] px-3 bg-[#204937] shrink-0 gap-2">
+        <footer className="flex items-center justify-between h-[32px] px-3 bg-pos-deep shrink-0 gap-2">
           <div className="flex items-center gap-1">
-            <button className="flex items-center gap-1 h-[22px] px-2.5 text-[9px] font-semibold bg-white text-[#204937] rounded-sm hover:bg-gray-100 active:scale-[0.98] transition-all"><Plus className="h-3 w-3" />Add Table</button>
+            <button className="flex items-center gap-1 h-[22px] px-2.5 text-[9px] font-semibold bg-white text-pos-deep rounded-sm hover:bg-gray-100 active:scale-[0.98] transition-all"><Plus className="h-3 w-3" />Add Table</button>
             <button className="flex items-center gap-1 h-[22px] px-2 text-[9px] font-medium text-white/80 hover:text-white hover:bg-white/10 rounded-sm transition-all"><Grid3X3 className="h-3 w-3" />Grid</button>
           </div>
           <div className="flex items-center gap-3 text-[9px] text-white/60">

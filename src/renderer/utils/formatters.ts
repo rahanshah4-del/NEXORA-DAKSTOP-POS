@@ -1,46 +1,11 @@
-import { useSettingsStore } from '@/stores/settings-store';
-
-// ── Currency symbol map ──
-export const currencySymbols: Record<string, string> = {
-  INR: '₹', USD: '$', EUR: '€', GBP: '£', AED: 'د.إ',
-  AUD: 'A$', CAD: 'C$', SGD: 'S$', SAR: '﷼', JPY: '¥',
-  CNY: '¥', PKR: 'Rs', BDT: '৳', LKR: 'රු', NPR: 'रू',
-};
-
-export function getCurrencySymbol(code: string): string {
-  return currencySymbols[code] || code;
-}
-
 /**
- * Centralized currency formatting helper.
- * Reads the selected currency from the settings store statically (safe outside React)
- * or via the `useCurrencySymbol()` hook for reactive updates.
+ * formatters — date/time/number helpers.
  *
- * @param amount - Amount in RUPEES (not paise/cents). The app uses rupees directly.
- * @param currencyCode - Optional override (defaults to settings store value)
+ * Currency formatting now lives in `@/utils/workspaceMoney`, driven by the
+ * workspace document rather than local settings. The symbol map,
+ * getCurrencySymbol, formatCurrencyAmount and formatCompactCurrencyAmount were
+ * removed once every screen had been converted.
  */
-export function formatCurrencyAmount(amount: number, currencyCode?: string): string {
-  // Use the settings store directly for non-reactive contexts
-  const code = currencyCode || useSettingsStore.getState().currency || 'INR';
-  const symbol = getCurrencySymbol(code);
-  return `${symbol}${amount.toLocaleString('en-IN')}`;
-}
-
-/**
- * Compact currency formatting for large numbers (e.g. ₹1.5L).
- * @param amount - Amount in RUPEES.
- */
-export function formatCompactCurrencyAmount(amount: number, currencyCode?: string): string {
-  const code = currencyCode || useSettingsStore.getState().currency || 'INR';
-  const symbol = getCurrencySymbol(code);
-  if (amount >= 1_00_000) {
-    return `${symbol}${(amount / 1_00_000).toFixed(1)}L`;
-  }
-  if (amount >= 1_000) {
-    return `${symbol}${(amount / 1_000).toFixed(1)}K`;
-  }
-  return `${symbol}${amount.toFixed(0)}`;
-}
 
 // ── Deprecated: old API kept for compatibility ──
 

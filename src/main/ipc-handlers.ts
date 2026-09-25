@@ -8,8 +8,20 @@ import {
 let mainWindowRef: BrowserWindow | null = null;
 // Active Firestore menuItems listener (single subscription, replaced on re-subscribe).
 let menuItemsUnsubscribe: (() => void) | null = null;
+// Active Firestore workspace-currency listener (single subscription, replaced on re-subscribe).
+let workspaceUnsubscribe: (() => void) | null = null;
 // Main → renderer auth bridge (single subscription for the app's lifetime).
 let authStateUnsubscribe: (() => void) | null = null;
+// ipcMain.handle throws on a duplicate channel, and registerIpcHandlers runs
+// again on macOS 'activate'. Channels are registered once per process; only
+// the window reference and its teardown hook are refreshed per window.
+let handlersRegistered = false;
+
+/** Drop the workspace-currency subscription (module scope so window hooks can call it). */
+function stopWorkspaceListener(): void {
+  workspaceUnsubscribe?.();
+  workspaceUnsubscribe = null;
+}
 
 /**
  * Push main-process Firebase auth transitions to the renderer.
@@ -51,8 +63,16 @@ function fromCents(cents: unknown): number {
 }
 
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
+  // Always point at the current window — 'activate' creates a new one.
   mainWindowRef = mainWindow;
-  attachAuthStateBridge();
+  attachAuthStateBridge(); // self-guarded: subscribes at most once
+
+  // A closed window can never receive push events, so drop the Firestore
+  // subscription with it. Attached per window, not per channel registration.
+  mainWindow.on('closed', stopWorkspaceListener);
+
+  if (handlersRegistered) return;
+  handlersRegistered = true;
 
   // Window Controls
   ipcMain.handle(IPC_CHANNELS.WINDOW_MINIMIZE, () => {
@@ -318,6 +338,35 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle(IPC_CHANNELS.FIRESTORE_MENU_ITEMS_LISTEN_STOP, () => {
     menuItemsUnsubscribe?.();
     menuItemsUnsubscribe = null;
+    return { success: true };
+  });
+
+  // Workspace currency (real-time) — forward onSnapshot updates to the renderer.
+  ipcMain.handle(IPC_CHANNELS.FIRESTORE_WORKSPACE_GET, async (_e, { workspaceId }) => {
+    try { const m = await resolveFirestore(); return await m.getWorkspaceCurrency(workspaceId); }
+    catch (e: any) { return { success: false, error: e.message }; }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.FIRESTORE_WORKSPACE_LISTEN, async (_e, { workspaceId }) => {
+    try {
+      const m = await resolveFirestore();
+      // Replace any existing listener (re-login / re-subscribe / StrictMode remount).
+      stopWorkspaceListener();
+      workspaceUnsubscribe = m.onWorkspaceCurrencyChanged(workspaceId, (data) => {
+        const win = mainWindowRef;
+        if (!win || win.isDestroyed()) return;
+        try {
+          win.webContents.send('firestore:workspace:changed', { workspaceId, ...data });
+        } catch { /* window torn down mid-send — non-critical */ }
+      });
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.FIRESTORE_WORKSPACE_LISTEN_STOP, () => {
+    stopWorkspaceListener();
     return { success: true };
   });
 
@@ -696,28 +745,24 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   });
 
   // Database handlers (deferred — database modules will be used when DB is set up)
-  ipcMain.handle(IPC_CHANNELS.DB_QUERY, async (_event, { sql, params }) => {
+  /**
+   * Highest order number already issued locally. Used by Settings to stop the
+   * bill counter being rewound over paid orders.
+   *
+   * Replaces the old db:query channel, which accepted arbitrary SQL from the
+   * renderer. This takes no input at all, so there is nothing to validate.
+   */
+  ipcMain.handle(IPC_CHANNELS.DB_GET_MAX_ORDER_NUMBER, async () => {
     try {
       const { getDatabase } = await import('../database/connection');
       const db = getDatabase();
-      if (sql.trim().toUpperCase().startsWith('SELECT')) {
-        return db.prepare(sql).all(...(params ?? []));
-      }
-      return [];
+      const row = db
+        .prepare('SELECT MAX(order_number) AS max_order FROM orders')
+        .get() as { max_order: number | null } | undefined;
+      return Number(row?.max_order) || 0;
     } catch (error: any) {
-      throw new Error(`DB query error: ${error.message}`);
+      throw new Error(`DB getMaxOrderNumber error: ${error.message}`);
     }
   });
 
-  ipcMain.handle(IPC_CHANNELS.DB_EXECUTE, async (_event, { sql, params }) => {
-    try {
-      const { getDatabase } = await import('../database/connection');
-      const db = getDatabase();
-      const stmt = db.prepare(sql);
-      const result = stmt.run(...(params ?? []));
-      return { changes: result.changes, lastInsertRowid: Number(result.lastInsertRowid) };
-    } catch (error: any) {
-      throw new Error(`DB execute error: ${error.message}`);
-    }
-  });
 }

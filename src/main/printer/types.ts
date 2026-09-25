@@ -73,6 +73,8 @@ export interface OrderPayload {
     email: string;
     gstNo: string;
     currency: string;
+    /** Owner's ASCII symbol override from the workspace doc; "" = use the ISO code. */
+    currencySymbol?: string;
     billPrefix: string;
     billFooter: string;
     cgstRate: string;

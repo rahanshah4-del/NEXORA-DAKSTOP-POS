@@ -21,7 +21,8 @@ import { Spinner } from '@/components/ui/Spinner';
 import { ScreenEmptyState, ScreenErrorState } from '../components/ScreenStates';
 import { TableSkeleton } from '../components/SkeletonLoader';
 import { formatCurrency } from '@/utils/formatters';
-import { useCurrencySymbol } from '@/hooks/useCurrency';
+import { useWorkspaceCurrencyValue } from '@/hooks/useWorkspaceCurrency';
+import { formatWorkspaceMoney, getWorkspaceSymbol } from '@/utils/workspaceMoney';
 import {
   Plus,
   Lock,
@@ -79,7 +80,13 @@ export const CashSessionsScreen: React.FC = () => {
   } = useCashSessions();
 
   const staffProfile = useAuthStore((s) => s.staffProfile);
-  const currSymbol = useCurrencySymbol();
+  const { currencyCode, currencySymbol: currencyOverride } = useWorkspaceCurrencyValue();
+  /** Bare symbol, for input labels like "Amount (Rs)". */
+  const currSymbol = getWorkspaceSymbol(currencyCode, currencyOverride);
+  /** Amounts already in major units (rupees). */
+  const money = (amount: number) => formatWorkspaceMoney(amount, currencyCode, currencyOverride);
+  /** Amounts stored in paise/cents by the Firestore schema. */
+  const moneyFromCents = (cents: number) => money((cents ?? 0) / 100);
 
   // ── Modals ──
   const [openModalOpen, setOpenModalOpen] = useState(false);
@@ -232,7 +239,7 @@ export const CashSessionsScreen: React.FC = () => {
             <div className="text-right">
               <p className="text-[10px] text-content-tertiary uppercase tracking-wider">Opening Balance</p>
               <p className="text-xl font-bold text-success">
-                {currSymbol}{((activeSession.openingBalanceCents ?? 0) / 100).toLocaleString('en-IN')}
+                {moneyFromCents(activeSession.openingBalanceCents ?? 0)}
               </p>
             </div>
           </div>
@@ -290,8 +297,7 @@ export const CashSessionsScreen: React.FC = () => {
                 header: 'Opening',
                 accessor: (r) => (
                   <span className="text-xs font-semibold">
-                    {currSymbol}
-                    {((r.openingBalanceCents ?? 0) / 100).toLocaleString('en-IN')}
+                    {moneyFromCents(r.openingBalanceCents ?? 0)}
                   </span>
                 ),
               },
@@ -301,8 +307,7 @@ export const CashSessionsScreen: React.FC = () => {
                 accessor: (r) =>
                   r.closingBalanceCents != null ? (
                     <span className="text-xs font-semibold">
-                      {currSymbol}
-                      {(r.closingBalanceCents / 100).toLocaleString('en-IN')}
+                      {moneyFromCents(r.closingBalanceCents)}
                     </span>
                   ) : (
                     <span className="text-xs text-content-tertiary">—</span>
@@ -323,8 +328,7 @@ export const CashSessionsScreen: React.FC = () => {
                       }`}
                     >
                       {r.differenceCents > 0 ? '+' : ''}
-                      {currSymbol}
-                      {(r.differenceCents / 100).toLocaleString('en-IN')}
+                      {moneyFromCents(r.differenceCents)}
                     </span>
                   ) : (
                     <span className="text-xs text-content-tertiary">—</span>
@@ -374,7 +378,7 @@ export const CashSessionsScreen: React.FC = () => {
       >
         <div className="space-y-4">
           <Input
-            label="Opening Balance (₹)"
+            label={`Opening Balance (${currSymbol})`}
             type="number"
             value={openingBalance}
             onChange={(e) => setOpeningBalance(e.target.value)}
@@ -416,14 +420,14 @@ export const CashSessionsScreen: React.FC = () => {
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <Input
-              label="Expected Balance (₹)"
+              label={`Expected Balance (${currSymbol})`}
               type="number"
               value={expectedBalance}
               onChange={(e) => setExpectedBalance(e.target.value)}
               placeholder="e.g. 5000"
             />
             <Input
-              label="Counted Cash (₹)"
+              label={`Counted Cash (${currSymbol})`}
               type="number"
               value={countedBalance}
               onChange={(e) => setCountedBalance(e.target.value)}
@@ -457,8 +461,7 @@ export const CashSessionsScreen: React.FC = () => {
                   }`}
                 >
                   {difference > 0 ? '+' : ''}
-                  {currSymbol}
-                  {difference.toLocaleString('en-IN')}
+                  {money(difference)}
                 </span>
               </div>
               <p className="text-[10px] text-content-tertiary mt-1">

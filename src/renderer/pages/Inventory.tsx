@@ -1,6 +1,6 @@
-import { useCurrencySymbol } from '@/hooks/useCurrency';
+import { useWorkspaceCurrencyValue } from '@/hooks/useWorkspaceCurrency';
+import { formatWorkspaceMoney, getWorkspaceSymbol } from '@/utils/workspaceMoney';
 import { useSettingsStore } from '@/stores/settings-store';
-import { getCurrencySymbol } from '@/utils/formatters';
 import { PageContainer } from '@/components/layout/PageContainer';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { SearchBar } from '@/components/shared/SearchBar';
@@ -23,7 +23,9 @@ const inventoryItems = [
 ];
 
 export default function Inventory() {
-  const currSymbol = useCurrencySymbol();
+  const { currencyCode, currencySymbol: currencyOverride } = useWorkspaceCurrencyValue();
+  const currSymbol = getWorkspaceSymbol(currencyCode, currencyOverride);
+  const money = (amount: number) => formatWorkspaceMoney(amount, currencyCode, currencyOverride);
   const lowStock = inventoryItems.filter((i) => i.status !== 'ok').length;
 
   return (
@@ -41,7 +43,7 @@ export default function Inventory() {
       <div className="grid grid-cols-3 gap-4 mb-6">
         <StatsCard title="Total Items" value={inventoryItems.length} icon={Boxes} iconColor="text-primary" />
         <StatsCard title="Low Stock" value={lowStock} change="Needs attention" changeType="warning" icon={AlertTriangle} iconColor="text-warning" />
-        <StatsCard title="Reorder Cost" value="₹4,800" subtitle="Estimated" icon={AlertTriangle} iconColor="text-info" />
+        <StatsCard title="Reorder Cost" value={formatWorkspaceMoney(4800, currencyCode, currencyOverride)} subtitle="Estimated" icon={AlertTriangle} iconColor="text-info" />
       </div>
 
       <div className="flex items-center gap-3 mb-4">

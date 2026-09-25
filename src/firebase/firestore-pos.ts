@@ -1189,3 +1189,93 @@ export async function addWalletTransaction(
     return { success: false, error: err.message ?? 'Failed to add wallet transaction' };
   }
 }
+
+// ═══════════════════════════════════════════════════════════
+//  workspace  —  the workspaces/{workspaceId} document itself
+// ═══════════════════════════════════════════════════════════
+
+/**
+ * The only slice of the workspace document the desktop is allowed to see.
+ * The document also holds owner identity fields, so both readers below
+ * project onto this shape rather than forwarding raw document data.
+ */
+export interface WorkspaceCurrency {
+  /** ISO-4217 code. null when the field is missing, non-string or invalid. */
+  currency: string | null;
+  /** Owner's symbol override. "" means "use the Intl default". */
+  currencySymbol: string;
+  /** False when the workspace document does not exist. */
+  exists: boolean;
+}
+
+const CURRENCY_CODE_RE = /^[A-Z]{3}$/;
+
+/** Trim, uppercase, and require exactly three A–Z letters. */
+function normalizeCurrencyCode(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const code = raw.trim().toUpperCase();
+  return CURRENCY_CODE_RE.test(code) ? code : null;
+}
+
+/**
+ * The symbol is owner-supplied free text that ends up rendered in the UI, so
+ * it is stripped of markup-significant characters and control codes, collapsed,
+ * and capped at 8 code points (Array.from, so surrogate pairs stay intact).
+ */
+function normalizeCurrencySymbol(raw: unknown): string {
+  if (typeof raw !== 'string') return '';
+  const cleaned = raw
+    .replace(/[<>&"'\\`]/g, '')
+    .replace(/[\u0000-\u001F\u007F-\u009F]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const points = Array.from(cleaned);
+  return (points.length > 8 ? points.slice(0, 8).join('') : cleaned).trim();
+}
+
+/** Project raw document data onto the safe, validated currency shape. */
+function pickWorkspaceCurrency(data: DocumentData | undefined, exists: boolean): WorkspaceCurrency {
+  return {
+    currency: normalizeCurrencyCode(data?.currency),
+    currencySymbol: normalizeCurrencySymbol(data?.currencySymbol),
+    exists,
+  };
+}
+
+/**
+ * One-shot read of the workspace currency. Staff sessions are permitted to
+ * read this document (firestore.rules: allow read: if isStaff(workspaceId)).
+ */
+export async function getWorkspaceCurrency(
+  workspaceId: string,
+): Promise<{ success: boolean; data?: WorkspaceCurrency; error?: string }> {
+  try {
+    const snap = await getDoc(doc(db(), 'workspaces', workspaceId));
+    return { success: true, data: pickWorkspaceCurrency(snap.data(), snap.exists()) };
+  } catch (err: any) {
+    return { success: false, error: err.message ?? 'Failed to read workspace currency' };
+  }
+}
+
+/**
+ * Live workspace-currency listener, so an owner changing the currency on the
+ * web dashboard updates open desktop terminals without a restart.
+ *
+ * Returns an unsubscribe function. The onSnapshot error handler mirrors the
+ * menuItems listener: log and keep the subscription object valid.
+ */
+export function onWorkspaceCurrencyChanged(
+  workspaceId: string,
+  onChange: (data: WorkspaceCurrency) => void,
+): Unsubscribe {
+  const ref = doc(db(), 'workspaces', workspaceId);
+  return onSnapshot(
+    ref,
+    (snap) => {
+      onChange(pickWorkspaceCurrency(snap.data(), snap.exists()));
+    },
+    (err) => {
+      console.error('[onWorkspaceCurrencyChanged] Error:', err.message);
+    },
+  );
+}

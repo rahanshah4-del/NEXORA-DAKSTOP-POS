@@ -3,11 +3,24 @@
  */
 
 import { EscposBuilder, type ReceiptSection } from './escpos-builder';
+import { printableSymbol } from '../../utils/printable-money';
 import type { TemplateResult } from './receipt-templates';
 
 // ── Helpers ──
 
-function symFor(cur?: string): string { return cur === 'INR' ? '₹' : cur === 'PKR' ? 'Rs' : '$'; }
+/**
+ * Report cells arrive pre-formatted from the renderer. The ESC/POS transport is
+ * ASCII-only, so any glyph that survived (for example "₹") is swapped for the
+ * ISO code rather than being silently corrupted on paper.
+ */
+function toAscii(text: string, currency?: string, currencySymbol?: string): string {
+  if (/^[\x20-\x7E]*$/.test(text)) return text;
+  const code = printableSymbol(currency, currencySymbol);
+  return text
+    .replace(/[^\x20-\x7E]+/g, (run) => (/[0-9]/.test(text) ? `${code} ` : code))
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
 
 function today(): string {
   return new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -21,6 +34,8 @@ export interface ReportPrintData {
   title: string;
   subtitle?: string;
   currency?: string;
+  /** Owner's ASCII symbol override from the workspace doc. */
+  currencySymbol?: string;
   /** Column definitions: [header, widthPct] — must sum to 100 */
   columns: [string, number][];
   /** Each row is an array of strings matching column count */
@@ -35,7 +50,7 @@ export function buildReportReceipt(
   data: ReportPrintData,
   paperWidth: number,
 ): TemplateResult {
-  const sym = symFor(data.currency);
+  const cell = (text: string) => toAscii(text, data.currency, data.currencySymbol);
   const b = new EscposBuilder(paperWidth);
   const sc: ReceiptSection[] = [];
   const w = b.width;
@@ -82,7 +97,7 @@ export function buildReportReceipt(
 
   // Data rows
   for (const row of data.rows) {
-    const cols: [string, number][] = row.map((cell, i) => [cell, data.columns[i]?.[1] ?? 10]);
+    const cols: [string, number][] = row.map((c, i) => [cell(c), data.columns[i]?.[1] ?? 10]);
     b.tableRow(cols);
     const rowLine = cols.map(([cell, pct]) => {
       const colW = Math.floor(w * pct / 100);
@@ -97,7 +112,8 @@ export function buildReportReceipt(
   // Summary
   if (data.summary && data.summary.length > 0) {
     b.feed();
-    for (const [label, value] of data.summary) {
+    for (const [label, rawValue] of data.summary) {
+      const value = cell(rawValue);
       b.boldRow(label, value);
       sc.push({ type: 'bold-row', left: label, right: value });
     }

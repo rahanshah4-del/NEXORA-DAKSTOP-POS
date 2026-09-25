@@ -16,7 +16,8 @@ import type { TableData } from '@/stores/table-store';
 import { IconBar } from '@/components/layout/IconBar';
 import { Button } from '@/components/ui/Button';
 import { notifyPrint, notifySuccess, notifyError, notifyInfo } from '@/stores/toast-store';
-import { getCurrencySymbol } from '@/utils/formatters';
+import { useWorkspaceCurrencyValue } from '@/hooks/useWorkspaceCurrency';
+import { formatWorkspaceMoney, getWorkspaceSymbol } from '@/utils/workspaceMoney';
 import { applyCouponDiscount, isCouponValid } from '@/utils/coupon-utils';
 import type { CouponData, CouponResult } from '@/utils/coupon-utils';
 import { userFriendlyError } from '@/utils/error-helper';
@@ -134,7 +135,10 @@ export default function Billing() {
   const cancelEditItem = () => { setEditingItemId(null); };
   const deleteOrder = () => { resetOrderState(); };
 
-  const currSymbol = getCurrencySymbol(s.currency);
+  // Currency comes from the workspace document (web dashboard), not local settings.
+  const { currencyCode, currencySymbol: currencyOverride } = useWorkspaceCurrencyValue();
+  const currSymbol = getWorkspaceSymbol(currencyCode, currencyOverride);
+  const money = (amount: number) => formatWorkspaceMoney(amount, currencyCode, currencyOverride);
   const parsedCgst = parseFloat(s.cgstRate);
   const parsedSgst = parseFloat(s.sgstRate);
   const cgstRate = (Number.isFinite(parsedCgst) ? parsedCgst : 0) / 100;
@@ -387,7 +391,13 @@ export default function Billing() {
           const kotData = { ...orderData, cartRows: newItems.map((item) => ({
             itemId: item.id, itemName: item.name, itemPrice: item.price, qty: item.qty, note: '',
           })) };
+          // Print-only copy — the order document itself is not modified.
           const cleanOrder = JSON.parse(JSON.stringify(kotData));
+          cleanOrder.restaurantInfo = {
+            ...(cleanOrder.restaurantInfo ?? {}),
+            currency: currencyCode,
+            currencySymbol: currencyOverride,
+          };
           window.api.printer.printKOT(cleanOrder, getPrinterSettings()).then((pr: any) => {
             if (pr.success) notifyInfo('KOT sent to printer (test mode — saved to print-jobs)');
             else notifyError(`Print failed: ${pr.error}`);
@@ -427,7 +437,10 @@ export default function Billing() {
       paymentMethod: walletAmountUsed > 0 ? 'Split' : 'Cash',
       restaurantInfo: {
         name: s.restaurantName, address: s.address, phone: s.phone, email: s.email,
-        gstNo: s.gstNo, currency: s.currency, billPrefix: s.billPrefix,
+        // Currency code stays as-is; the resolved workspace symbol rides along so
+        // the receipt templates can print the owner's override.
+        gstNo: s.gstNo, currency: s.currency, currencySymbol: currencyOverride,
+        billPrefix: s.billPrefix,
         billFooter: s.billFooter, cgstRate: s.cgstRate, sgstRate: s.sgstRate,
       },
     };
@@ -534,7 +547,7 @@ export default function Billing() {
       } else if (cr.type === 'free_delivery') {
         notifySuccess('Coupon applied: Free Delivery!');
       } else {
-        notifySuccess(`Coupon applied: ${currSymbol}${cr.discount.toLocaleString('en-IN')} off!`);
+        notifySuccess(`Coupon applied: ${money(cr.discount)} off!`);
       }
     } catch (err: any) {
       setCouponError(err?.message ?? 'Failed to apply coupon');
@@ -791,12 +804,18 @@ export default function Billing() {
       console.log('[Billing] STEP B: Local write confirmed, resetting cart and notifying UI');
       const paymentBreakdown = useWallet
         ? (remainingAfterWallet > 0
-          ? `Wallet: ${currSymbol}${walletAmountUsed.toLocaleString('en-IN')} + Cash: ${currSymbol}${remainingAfterWallet.toLocaleString('en-IN')}`
-          : `Wallet: ${currSymbol}${walletAmountUsed.toLocaleString('en-IN')}`)
-        : `${currSymbol}${total.toLocaleString('en-IN')}`;
+          ? `Wallet: ${money(walletAmountUsed)} + Cash: ${money(remainingAfterWallet)}`
+          : `Wallet: ${money(walletAmountUsed)}`)
+        : `${money(total)}`;
       notifySuccess(`Bill Paid — ${paymentBreakdown} (${orderNumber})`);
       if (andPrint) {
+        // Print-only copy — the Firestore/SQLite orderData above is not modified.
         const cleanOrderData = JSON.parse(JSON.stringify(orderData));
+        cleanOrderData.restaurantInfo = {
+          ...(cleanOrderData.restaurantInfo ?? {}),
+          currency: currencyCode,
+          currencySymbol: currencyOverride,
+        };
         window.api.printer.printBill(cleanOrderData, getPrinterSettings()).then((pr: any) => {
           if (pr.success) notifyInfo('Bill sent to printer (test mode — saved to print-jobs)');
           else notifyError(`Print failed: ${pr.error}`);
@@ -876,7 +895,7 @@ export default function Billing() {
       console.error('[Billing] completePayment FAILED — full error:', err);
       if (err?.stack) console.error('[Billing] completePayment FAILED — stack:', err.stack);
       if (walletWasCharged) {
-        notifyError(`⚠️ Wallet was charged ${currSymbol}${walletAmountUsed.toLocaleString('en-IN')} but order save failed. Please verify with owner. Error: ${err.message}`);
+        notifyError(`⚠️ Wallet was charged ${money(walletAmountUsed)} but order save failed. Please verify with owner. Error: ${err.message}`);
       } else {
         notifyError(userFriendlyError(err, 'processing payment'));
       }
@@ -1031,26 +1050,26 @@ export default function Billing() {
   }, [passedTableId]); // eslint-disable-line
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-white select-none font-sans">
+    <div className="flex h-screen w-screen overflow-hidden bg-pos-ground select-none font-sans">
       <IconBar />
-      <div className="flex flex-1 flex-col min-w-0 ml-[56px]">
+      <div className="flex flex-1 flex-col min-w-0 ml-rail">
         {/* Header */}
-        <header className="flex items-center h-[48px] px-4 bg-white border-b border-[#e2e8e4] shrink-0">
-          <h1 className="text-[14px] font-bold text-[#111814] tracking-tight">Nexora Solution</h1>
-          <span className="h-4 w-px bg-[#dee2e6] mx-2.5" />
-          <span className="text-[11px] text-[#94a399] font-medium">Enterprise POS</span>
+        <header className="flex items-center h-[48px] px-4 bg-pos-bar border-b border-pos-card-border shrink-0">
+          <h1 className="text-[14px] font-bold text-pos-ink tracking-tight">Nexora Solution</h1>
+          <span className="h-4 w-px bg-pos-card-border mx-2.5" />
+          <span className="text-[11px] text-pos-muted font-medium">Enterprise POS</span>
           <div className="flex-1 drag-region h-full" />
           <div className="flex items-center gap-3 no-drag">
-            <span className="text-[11px] text-[#47554d] flex items-center gap-1.5"><Clock className="h-3.5 w-3.5 text-[#94a399]" />02:45 PM</span>
-            <div className="flex items-center gap-1.5 text-[11px] text-[#47554d]">
-              <div className="h-6 w-6 rounded-full bg-[#cceddb] flex items-center justify-center"><User className="h-3 w-3 text-[#0f7b47]" /></div>
-              Admin <ChevronDown className="h-3 w-3 text-[#94a399]" />
+            <span className="text-[11px] text-pos-muted flex items-center gap-1.5"><Clock className="h-3.5 w-3.5 text-pos-muted" />02:45 PM</span>
+            <div className="flex items-center gap-1.5 text-[11px] text-pos-muted">
+              <div className="h-6 w-6 rounded-full bg-pos-primary-soft flex items-center justify-center"><User className="h-3 w-3 text-pos-primary" /></div>
+              Admin <ChevronDown className="h-3 w-3 text-pos-muted" />
             </div>
           </div>
         </header>
 
         {/* Top Tab Bar */}
-        <div className="flex items-center h-[40px] bg-[#f8faf9] border-b border-[#dee2e6] shrink-0">
+        <div className="flex items-center h-[40px] bg-pos-bar border-b border-pos-card-border shrink-0">
           {availableTabs.map((tab) => (
             <button key={tab} onClick={() => {
               if (tab === activeTab) return;
@@ -1066,30 +1085,30 @@ export default function Billing() {
               if (tab === 'Delivery') resetDeliveryForm();
               if (tab !== 'Dine-in') setSelectedTableId(null);
             }}
-              className={cn('flex-1 h-full text-[11px] font-semibold transition-colors border-b-2', activeTab === tab ? 'text-[#187a49] border-[#187a49] bg-white' : 'text-[#757575] border-transparent hover:text-[#47554d] hover:bg-[#f1f5f2]')}
+              className={cn('flex-1 h-full text-[11px] font-semibold transition-colors border-b-2', activeTab === tab ? 'text-pos-primary border-pos-primary bg-white' : 'text-pos-muted border-transparent hover:text-pos-muted hover:bg-pos-ground')}
             >{tab}</button>
           ))}
         </div>
 
         {/* Sub-header */}
-        <div className="flex items-center h-[32px] px-3 bg-white border-b border-[#dee2e6] shrink-0 gap-1.5">
+        <div className="flex items-center h-[32px] px-3 bg-pos-bar border-b border-pos-card-border shrink-0 gap-1.5">
           {needsTable && selectedTableId && (
-            <button onClick={deselectTable} className="flex items-center gap-1 text-[10px] text-[#0f7b47] font-medium hover:underline">
+            <button onClick={deselectTable} className="flex items-center gap-1 text-[10px] text-pos-primary font-medium hover:underline">
               <ArrowLeft className="h-3 w-3" />Back to Tables
             </button>
           )}
           {needsCustomerForm && deliveryStep === 'menu' && (
-            <button onClick={() => setDeliveryStep('customer')} className="flex items-center gap-1 text-[10px] text-[#0f7b47] font-medium hover:underline">
+            <button onClick={() => setDeliveryStep('customer')} className="flex items-center gap-1 text-[10px] text-pos-primary font-medium hover:underline">
               <ArrowLeft className="h-3 w-3" />Edit Customer
             </button>
           )}
           {needsTable && selectedTableId && selectedTable && (
-            <span className="text-[10px] text-[#47554d] font-semibold">{selectedTable.name} · {selectedTable.section} · {selectedTable.capacity} seats</span>
+            <span className="text-[10px] text-pos-muted font-semibold">{selectedTable.name} · {selectedTable.section} · {selectedTable.capacity} seats</span>
           )}
           {needsCustomerForm && deliveryStep === 'menu' && selectedCustomer && (
-            <span className="text-[10px] text-[#47554d] font-semibold">{selectedCustomer.name} · {selectedCustomer.phone}</span>
+            <span className="text-[10px] text-pos-muted font-semibold">{selectedCustomer.name} · {selectedCustomer.phone}</span>
           )}
-          {!needsTable && !needsCustomerForm && <span className="text-[10px] text-[#47554d] font-medium">{activeTab} Order</span>}
+          {!needsTable && !needsCustomerForm && <span className="text-[10px] text-pos-muted font-medium">{activeTab} Order</span>}
 
           {/* ── Pending Order Tabs (Quick Bill + PickUp) ── */}
           {(activeTab === 'Quick Bill' || activeTab === 'PickUp') && pendingTabs.length > 0 && (
@@ -1106,14 +1125,14 @@ export default function Billing() {
                   className={cn(
                     'flex items-center gap-1 px-2 py-0.5 text-[9px] font-medium rounded whitespace-nowrap transition-colors border',
                     activePendingOrderNumber === tab.orderNumber
-                      ? 'bg-[#0f7b47] text-white border-[#0f7b47]'
-                      : 'bg-white text-[#47554d] border-[#dee2e6] hover:border-[#0f7b47] hover:text-[#0f7b47]',
+                      ? 'bg-pos-primary text-white border-pos-primary'
+                      : 'bg-white text-pos-muted border-pos-card-border hover:border-pos-primary hover:text-pos-primary',
                   )}
                 >
                   {activeTab === 'PickUp' && tab.customerName && tab.customerName !== 'Walk-in Guest'
                     ? tab.customerName
                     : tab.orderNumber}
-                  <span className="opacity-70">· {currSymbol}{tab.total.toLocaleString('en-IN')}</span>
+                  <span className="opacity-70">· {money(tab.total)}</span>
                 </button>
               ))}
             </div>
@@ -1126,7 +1145,7 @@ export default function Billing() {
             <span className="text-[9px] text-red-500 font-medium mr-1">Unsaved items — click again to confirm</span>
           )}
 
-          <button onClick={() => { newOrder(); if (needsCustomerForm) resetDeliveryForm(); }} className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-semibold text-white bg-[#0f7b47] hover:bg-[#056638] rounded transition-colors"><Plus className="h-3 w-3" />New Order</button>
+          <button onClick={() => { newOrder(); if (needsCustomerForm) resetDeliveryForm(); }} className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-semibold text-white bg-pos-primary hover:bg-pos-primary-dark rounded transition-colors"><Plus className="h-3 w-3" />New Order</button>
         </div>
 
         {/* WORKSPACE */}
@@ -1137,21 +1156,21 @@ export default function Billing() {
               /* ═══ TABLE VIEW (Dine-in) ═══ */
               <>
                 {/* Section tabs */}
-                <div className="flex items-center h-[34px] px-3 border-b border-[#dee2e6] shrink-0 gap-1 bg-[#f8faf9]">
+                <div className="flex items-center h-[34px] px-3 border-b border-pos-card-border shrink-0 gap-1 bg-pos-bar">
                   {sections.map((sec) => (
                     <button key={sec} onClick={() => setActiveSection(sec)}
-                      className={cn('px-2.5 py-1 text-[9px] font-semibold rounded whitespace-nowrap transition-colors', activeSection === sec ? 'bg-[#0f7b47] text-white' : 'text-[#47554d] hover:bg-white')}>{sec}</button>
+                      className={cn('px-2.5 py-1 text-[9px] font-semibold rounded whitespace-nowrap transition-colors', activeSection === sec ? 'bg-pos-primary text-white' : 'text-pos-muted hover:bg-white')}>{sec}</button>
                   ))}
                   <div className="flex-1" />
-                  <div className="flex items-center gap-2 text-[9px] text-[#47554d]">
+                  <div className="flex items-center gap-2 text-[9px] text-pos-muted">
                     <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: s.tableColors.free }} />{availableCount} Free</span>
                     <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: s.tableColors.itemsInKOT }} />{occupiedCount} Occupied</span>
                     <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: s.tableColors.reserved }} />{reservedCount} Reserved</span>
                   </div>
                   <div className="relative ml-1">
-                    <Search className="absolute left-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-[#94a399]" />
+                    <Search className="absolute left-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-pos-muted" />
                     <input type="text" placeholder="Find table..." value={tableSearch} onChange={(e) => setTableSearch(e.target.value)}
-                      className="h-[22px] w-28 pl-6 pr-2 text-[9px] bg-white border border-[#dee2e6] rounded focus:outline-none focus:ring-1 focus:ring-[#0f7b47]" />
+                      className="h-[22px] w-28 pl-6 pr-2 text-[9px] bg-white border border-pos-card-border rounded focus:outline-none focus:ring-1 focus:ring-pos-primary" />
                   </div>
                 </div>
 
@@ -1165,7 +1184,7 @@ export default function Billing() {
                       const isBill = table.status === 'billing';
                       const isSel = table.id === selectedTableId;
                       const tc = s.tableColors;
-                      const statusColor = isSel ? tc.selected : isAvail ? tc.free : isOcc ? tc.itemsInKOT : isBill ? tc.billSaved : isRes ? tc.reserved : '#94a399';
+                      const statusColor = isSel ? tc.selected : isAvail ? tc.free : isOcc ? tc.itemsInKOT : isBill ? tc.billSaved : isRes ? tc.reserved : 'rgb(var(--pos-muted))';
                       return (
                         <button key={table.id} onClick={() => selectTable(table)}
                           style={{
@@ -1177,28 +1196,28 @@ export default function Billing() {
                           <span className="absolute top-2 right-2 h-2 w-2 rounded-full"
                             style={{ backgroundColor: statusColor }}
                             data-animate={isOcc || isSel} />
-                          <p className="text-[12px] font-bold text-[#111814] leading-tight">{table.name}</p>
-                          <p className="text-[8px] text-[#94a399] mt-0.5">{table.section}</p>
-                          <div className="flex items-center gap-1 mt-1.5 text-[9px] text-[#47554d]">
+                          <p className="text-[12px] font-bold text-pos-ink leading-tight">{table.name}</p>
+                          <p className="text-[8px] text-pos-muted mt-0.5">{table.section}</p>
+                          <div className="flex items-center gap-1 mt-1.5 text-[9px] text-pos-muted">
                             <UsersIcon className="h-3 w-3" /><span>{table.capacity} seats</span>
                           </div>
                           {(isOcc || isBill) && table.customer && (
-                            <div className="mt-2 pt-2 border-t border-[#e2e8e0] space-y-0.5">
-                              <p className="text-[10px] font-medium text-[#111814]">{table.customer}</p>
-                              <p className="text-[9px] text-[#47554d]">{table.orderId} · {currSymbol}{table.orderTotal?.toLocaleString('en-IN')}</p>
-                              <p className="text-[8px] text-[#94a399]">{table.time} · {table.guests} guests</p>
+                            <div className="mt-2 pt-2 border-t border-pos-card-border space-y-0.5">
+                              <p className="text-[10px] font-medium text-pos-ink">{table.customer}</p>
+                              <p className="text-[9px] text-pos-muted">{table.orderId} · {money(table.orderTotal ?? 0)}</p>
+                              <p className="text-[8px] text-pos-muted">{table.time} · {table.guests} guests</p>
                             </div>
                           )}
-                          {isRes && <div className="mt-2 pt-2 border-t border-[#e2e8e0]"><p className="text-[9px] text-sky-600 font-medium">Reserved</p></div>}
-                          {isAvail && <div className="mt-2 pt-2 border-t border-[#e2e8e0]"><p className="text-[9px] text-[#42b273] font-medium">Tap to open</p></div>}
-                          {isSel && <div className="mt-2 pt-2 border-t border-[#e2e8e0]"><p className="text-[9px] text-[#2196F3] font-medium">Selected ✓</p></div>}
+                          {isRes && <div className="mt-2 pt-2 border-t border-pos-card-border"><p className="text-[9px] text-sky-600 font-medium">Reserved</p></div>}
+                          {isAvail && <div className="mt-2 pt-2 border-t border-pos-card-border"><p className="text-[9px] text-pos-primary font-medium">Tap to open</p></div>}
+                          {isSel && <div className="mt-2 pt-2 border-t border-pos-card-border"><p className="text-[9px] text-pos-prep-fg font-medium">Selected ✓</p></div>}
                         </button>
                       );
                     })}
                   </div>
                   {filteredTables.length === 0 && (
                     <div className="flex flex-col items-center justify-center h-40 gap-2">
-                      <p className="text-[#94a399] text-xs">
+                      <p className="text-pos-muted text-xs">
                         {tables.length === 0
                           ? 'No tables loaded. Go to Settings → Menu Configuration to load tables.'
                           : 'No tables match your search.'}
@@ -1209,41 +1228,41 @@ export default function Billing() {
               </>
             ) : needsCustomerForm && deliveryStep === 'customer' ? (
               /* ═══ DELIVERY / PICKUP CUSTOMER FORM ═══ */
-              <div className="flex-1 flex items-center justify-center bg-[#f8faf9]">
-                <div className="w-full max-w-md bg-white border border-[#dee2e6] rounded-xl shadow-sm p-6 mx-4">
+              <div className="flex-1 flex items-center justify-center bg-pos-bar">
+                <div className="w-full max-w-md bg-white border border-pos-card-border rounded-xl shadow-sm p-6 mx-4">
                   <div className="text-center mb-5">
                     <div className="h-12 w-12 mx-auto mb-3 rounded-full bg-primary/10 flex items-center justify-center">
                       <User className="h-6 w-6 text-primary" />
                     </div>
-                    <h2 className="text-[15px] font-bold text-[#111814]">{activeTab} Order</h2>
+                    <h2 className="text-[15px] font-bold text-pos-ink">{activeTab} Order</h2>
                     <p className="text-[11px] text-content-secondary mt-1">Enter customer details to continue</p>
                   </div>
                   <div className="space-y-3">
                     <div>
                       <label className="block text-[10px] font-semibold text-content mb-1">Customer Name *</label>
                       <input type="text" value={deliveryName} onChange={(e) => { setDeliveryName(e.target.value); setDeliveryError(null); }} placeholder="Enter customer name" autoFocus
-                        className="w-full h-[34px] px-3 text-[11px] border border-[#dee2e6] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#0f7b47]" />
+                        className="w-full h-[34px] px-3 text-[11px] border border-pos-card-border rounded-lg focus:outline-none focus:ring-1 focus:ring-pos-primary" />
                     </div>
                     <div>
                       <label className="block text-[10px] font-semibold text-content mb-1">Phone Number *</label>
                       <input type="tel" value={deliveryPhone} onChange={(e) => { setDeliveryPhone(e.target.value); setDeliveryError(null); }} placeholder="+91 XXXXXXXXXX"
-                        className="w-full h-[34px] px-3 text-[11px] border border-[#dee2e6] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#0f7b47]" />
+                        className="w-full h-[34px] px-3 text-[11px] border border-pos-card-border rounded-lg focus:outline-none focus:ring-1 focus:ring-pos-primary" />
                     </div>
                     <div>
                       <label className="block text-[10px] font-semibold text-content mb-1">Delivery Address</label>
                       <input type="text" value={deliveryAddress} onChange={(e) => { setDeliveryAddress(e.target.value); setDeliveryError(null); }} placeholder="Full address for delivery"
-                        className="w-full h-[34px] px-3 text-[11px] border border-[#dee2e6] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#0f7b47]" />
+                        className="w-full h-[34px] px-3 text-[11px] border border-pos-card-border rounded-lg focus:outline-none focus:ring-1 focus:ring-pos-primary" />
                     </div>
                     {deliveryError && (
                       <p className="text-[10px] font-medium text-red-500 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{deliveryError}</p>
                     )}
                     <div className="flex items-center gap-2 pt-2">
                       <button onClick={() => { setDeliveryName('Walk-in'); setDeliveryPhone('N/A'); setDeliveryError(null); setDeliveryStep('menu'); }}
-                        className="flex-1 h-[38px] text-[11px] font-medium border border-[#dee2e6] text-[#47554d] rounded-lg hover:bg-[#f1f5f2] transition-colors">
+                        className="flex-1 h-[38px] text-[11px] font-medium border border-pos-card-border text-pos-muted rounded-lg hover:bg-pos-ground transition-colors">
                         Skip (Walk-in)
                       </button>
                       <button onClick={handleDeliveryContinue} disabled={!deliveryName.trim() || !deliveryPhone.trim() || deliveryLoading}
-                        className="flex-1 h-[38px] text-[11px] font-semibold bg-[#0f7b47] text-white rounded-lg hover:bg-[#056638] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                        className="flex-1 h-[38px] text-[11px] font-semibold bg-pos-primary text-white rounded-lg hover:bg-pos-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                         {deliveryLoading ? 'Creating customer…' : 'Continue to Menu →'}
                       </button>
                     </div>
@@ -1254,30 +1273,30 @@ export default function Billing() {
               /* ═══ MENU GRID ═══ */
               <>
                 {/* Categories + Search */}
-                <div className="flex items-center h-[30px] px-3 border-b border-[#dee2e6] shrink-0 gap-0.5 bg-[#f8faf9] overflow-x-auto">
-                  <button onClick={() => setActiveCat('All')} className={cn('px-2.5 py-0.5 text-[9px] font-semibold rounded whitespace-nowrap', activeCat === 'All' ? 'bg-[#0f7b47] text-white' : 'text-[#47554d] hover:bg-white')}>All</button>
+                <div className="flex items-center h-[30px] px-3 border-b border-pos-card-border shrink-0 gap-0.5 bg-pos-bar overflow-x-auto">
+                  <button onClick={() => setActiveCat('All')} className={cn('px-2.5 py-0.5 text-[9px] font-semibold rounded whitespace-nowrap', activeCat === 'All' ? 'bg-pos-primary text-white' : 'text-pos-muted hover:bg-white')}>All</button>
                   {menuCategories.map((cat) => (
-                    <button key={cat} onClick={() => setActiveCat(cat)} className={cn('px-2.5 py-0.5 text-[9px] font-semibold rounded whitespace-nowrap', activeCat === cat ? 'bg-[#0f7b47] text-white' : 'text-[#47554d] hover:bg-white')}>{cat}</button>
+                    <button key={cat} onClick={() => setActiveCat(cat)} className={cn('px-2.5 py-0.5 text-[9px] font-semibold rounded whitespace-nowrap', activeCat === cat ? 'bg-pos-primary text-white' : 'text-pos-muted hover:bg-white')}>{cat}</button>
                   ))}
                   <div className="flex-1" />
                   <div className="relative mr-1">
-                    <Search className="absolute left-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-[#94a399]" />
-                    <input type="text" placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="h-[22px] w-32 pl-6 pr-2 text-[9px] bg-white border border-[#dee2e6] rounded focus:outline-none focus:ring-1 focus:ring-[#0f7b47]" />
+                    <Search className="absolute left-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-pos-muted" />
+                    <input type="text" placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="h-[22px] w-32 pl-6 pr-2 text-[9px] bg-white border border-pos-card-border rounded focus:outline-none focus:ring-1 focus:ring-pos-primary" />
                   </div>
-                  <button onClick={() => navigate('/products')} className="flex items-center gap-1 px-2 py-0.5 text-[9px] text-[#47554d] font-medium hover:text-[#0f7b47] hover:bg-[#f0f9f4] rounded transition-colors"><ExternalLink className="h-3 w-3" />Menu</button>
+                  <button onClick={() => navigate('/products')} className="flex items-center gap-1 px-2 py-0.5 text-[9px] text-pos-muted font-medium hover:text-pos-primary hover:bg-pos-primary-soft rounded transition-colors"><ExternalLink className="h-3 w-3" />Menu</button>
                 </div>
 
                 {/* Menu Cards */}
                 <div className="flex-1 overflow-auto p-2">
                   {filteredMenu.length === 0 ? (
-                    <div className="flex items-center justify-center h-full text-[#94a399] text-xs">No items found</div>
+                    <div className="flex items-center justify-center h-full text-pos-muted text-xs">No items found</div>
                   ) : (
                     <div className={cn('grid gap-1.5', s.compactItemView ? 'grid-cols-5 xl:grid-cols-7' : 'grid-cols-3 xl:grid-cols-4')}>
                       {filteredMenu.map((menu) => (
                         <button key={menu.id} onClick={() => addItem(menu)}
                           className={cn(
                             'text-left rounded-lg border bg-white transition-all cursor-pointer active:scale-[0.98] group',
-                            'border-[#e2e8e0] hover:border-[#0f7b47] hover:shadow-md hover:-translate-y-0.5',
+                            'border-pos-card-border hover:border-pos-primary hover:shadow-md hover:-translate-y-0.5',
                             s.compactItemView ? 'p-2' : 'p-3',
                           )}>
                           {s.displayItemImage && menu.image && (
@@ -1285,26 +1304,26 @@ export default function Billing() {
                               onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                           )}
                           <p className={cn(
-                            'font-semibold text-[#111814] leading-snug line-clamp-2',
+                            'font-semibold text-pos-ink leading-snug line-clamp-2',
                             s.compactItemView ? 'text-[11px]' : 'text-[13px]',
                           )}>{menu.name}</p>
                           {s.displayItemDetails && (
-                            <p className="text-[10px] text-[#5c6b62] mt-0.5 truncate">{menu.category}</p>
+                            <p className="text-[10px] text-pos-muted mt-0.5 truncate">{menu.category}</p>
                           )}
                           {s.displayItemCode && (
-                            <p className="text-[8px] text-[#94a399] font-mono mt-0.5">
+                            <p className="text-[8px] text-pos-muted font-mono mt-0.5">
                               SKU-{menu.id.slice(-6).toUpperCase()}
                             </p>
                           )}
-                          <div className="flex items-center gap-1.5 mt-2 pt-2 border-t border-[#f0f2f0]">
+                          <div className="flex items-center gap-1.5 mt-2 pt-2 border-t border-pos-ground">
                             <span className={cn(
-                              'font-bold text-[#0f7b47] tabular-nums tracking-tight',
+                              'font-bold text-pos-primary tabular-nums tracking-tight',
                               s.compactItemView ? 'text-[12px]' : 'text-[14px]',
-                            )}>{currSymbol}{menu.price}</span>
+                            )}>{money(menu.price)}</span>
                             {s.showPrepTime && typeof menu.prepTimeMinutes === 'number' && menu.prepTimeMinutes > 0 && (
                               <>
-                                <span className="text-[#c8ceca] text-[10px]">·</span>
-                                <span className="text-[10px] text-[#94a399]">~{menu.prepTimeMinutes}m</span>
+                                <span className="text-pos-axis text-[10px]">·</span>
+                                <span className="text-[10px] text-pos-muted">~{menu.prepTimeMinutes}m</span>
                               </>
                             )}
                           </div>
@@ -1319,50 +1338,50 @@ export default function Billing() {
 
           {/* RIGHT: Order Panel (show only when menu is visible) */}
           {showRightPanel && (
-            <div className="w-[380px] flex flex-col border-l border-[#dee2e6] shrink-0 bg-white">
+            <div className="w-[380px] flex flex-col border-l border-pos-card-border shrink-0 bg-white">
               {/* Table info */}
               {needsTable && selectedTable && (
-                <div className="flex items-center justify-between px-3 h-[30px] border-b border-[#e2e8e4] bg-[#f8faf9] shrink-0">
+                <div className="flex items-center justify-between px-3 h-[30px] border-b border-pos-card-border bg-pos-bar shrink-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-semibold text-[#111814]">{selectedTable.name}</span>
-                    {s.customerNameOnTable && selectedTable.customer && <span className="text-[10px] text-[#47554d]">· {selectedTable.customer}</span>}
+                    <span className="text-[11px] font-semibold text-pos-ink">{selectedTable.name}</span>
+                    {s.customerNameOnTable && selectedTable.customer && <span className="text-[10px] text-pos-muted">· {selectedTable.customer}</span>}
                   </div>
                   <div className="flex items-center gap-2">
-                    {s.displayTimeOnTable && selectedTable.time && <span className="text-[10px] text-[#47554d]">{selectedTable.time}</span>}
-                    {s.orderStatusOnTable && <span className="text-[10px] text-content-secondary bg-[#e8f5e9] px-1.5 py-0.5 rounded">Active</span>}
-                    {s.kotNumberOnTable && selectedTable.orderId && <span className="text-[11px] font-semibold text-[#0f7b47]">{selectedTable.orderId}</span>}
+                    {s.displayTimeOnTable && selectedTable.time && <span className="text-[10px] text-pos-muted">{selectedTable.time}</span>}
+                    {s.orderStatusOnTable && <span className="text-[10px] text-content-secondary bg-pos-primary-soft px-1.5 py-0.5 rounded">Active</span>}
+                    {s.kotNumberOnTable && selectedTable.orderId && <span className="text-[11px] font-semibold text-pos-primary">{selectedTable.orderId}</span>}
                   </div>
                 </div>
               )}
 
               {/* Order Action Buttons */}
               {orderItems.length > 0 && (
-                <div className="flex items-center gap-1 px-2.5 py-1.5 border-b border-[#dee2e6] bg-white shrink-0 flex-wrap">
+                <div className="flex items-center gap-1 px-2.5 py-1.5 border-b border-pos-card-border bg-pos-bar shrink-0 flex-wrap">
                   <button onClick={() => { const first = orderItems[0]; if (first) startEditItem(first); }}
-                    className="flex items-center gap-1 px-2.5 py-1 text-[9px] font-medium text-[#47554d] border border-[#dee2e6] rounded hover:bg-[#f1f5f2] hover:text-[#111814] transition-colors">
+                    className="flex items-center gap-1 px-2.5 py-1 text-[9px] font-medium text-pos-muted border border-pos-card-border rounded hover:bg-pos-ground hover:text-pos-ink transition-colors">
                     <Edit className="h-3 w-3" />Edit
                   </button>
                   <button onClick={deleteOrder}
-                    className="flex items-center gap-1 px-2.5 py-1 text-[9px] font-medium text-[#e2234e] border border-[#dee2e6] rounded hover:bg-red-50 transition-colors">
+                    className="flex items-center gap-1 px-2.5 py-1 text-[9px] font-medium text-pos-cancel-fg border border-pos-card-border rounded hover:bg-red-50 transition-colors">
                     <Trash2 className="h-3 w-3" />Delete
                   </button>
                   {/* Shift to Table — Quick Bill / PickUp only */}
                   {(activeTab === 'Quick Bill' || activeTab === 'PickUp') && (
                     <button onClick={() => setShowShiftToTablePicker(true)}
-                      className="flex items-center gap-1 px-2.5 py-1 text-[9px] font-medium text-[#0f7b47] border border-[#0f7b47]/30 rounded hover:bg-[#f0f9f4] transition-colors">
+                      className="flex items-center gap-1 px-2.5 py-1 text-[9px] font-medium text-pos-primary border border-pos-primary/30 rounded hover:bg-pos-primary-soft transition-colors">
                       <LayoutGrid className="h-3 w-3" />Shift to Table
                     </button>
                   )}
                   {/* Shift Table — Dine-in only, already assigned */}
                   {needsTable && selectedTableId && (
                     <button onClick={() => setShowShiftTablePicker(true)}
-                      className="flex items-center gap-1 px-2.5 py-1 text-[9px] font-medium text-[#47554d] border border-[#dee2e6] rounded hover:bg-[#f1f5f2] hover:text-[#111814] transition-colors">
+                      className="flex items-center gap-1 px-2.5 py-1 text-[9px] font-medium text-pos-muted border border-pos-card-border rounded hover:bg-pos-ground hover:text-pos-ink transition-colors">
                       <ArrowLeft className="h-3 w-3" />Shift Table
                     </button>
                   )}
                   <div className="flex-1" />
                   <button onClick={() => setShowPrintView(true)}
-                    className="flex items-center gap-1 px-2.5 py-1 text-[9px] font-medium text-[#0f7b47] border border-[#0f7b47]/30 rounded hover:bg-[#f0f9f4] transition-colors">
+                    className="flex items-center gap-1 px-2.5 py-1 text-[9px] font-medium text-pos-primary border border-pos-primary/30 rounded hover:bg-pos-primary-soft transition-colors">
                     <Eye className="h-3 w-3" />Print View
                   </button>
                 </div>
@@ -1372,36 +1391,36 @@ export default function Billing() {
               <div className="flex-1 overflow-auto">
                 <div className="p-2.5 space-y-1">
                   {orderItems.length === 0 ? (
-                    <div className="text-center py-8 text-[#94a399] text-[11px]"><Package className="h-8 w-8 mx-auto mb-2 opacity-30" />No items<br />Click menu to add</div>
+                    <div className="text-center py-8 text-pos-muted text-[11px]"><Package className="h-8 w-8 mx-auto mb-2 opacity-30" />No items<br />Click menu to add</div>
                   ) : (
                     orderItems.map((item, idx) => (
-                      <div key={item.id} className={cn('flex items-center gap-2 p-2 rounded-lg transition-all group border', idx === 0 ? 'bg-[#fef2f2] border-[#fecaca]' : 'border-transparent hover:border-[#e2e8e0] hover:bg-[#f8faf9]')}>
+                      <div key={item.id} className={cn('flex items-center gap-2 p-2 rounded-lg transition-all group border', idx === 0 ? 'bg-pos-cancel-bg border-pos-cancel-bg' : 'border-transparent hover:border-pos-card-border hover:bg-pos-bar')}>
                         {editingItemId === item.id ? (
                           // Inline edit mode
                           <div className="flex-1 space-y-1">
                             <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} autoFocus
-                              className="w-full h-[24px] px-1.5 text-[10px] border border-[#dee2e6] rounded focus:outline-none focus:ring-1 focus:ring-[#0f7b47]" />
+                              className="w-full h-[24px] px-1.5 text-[10px] border border-pos-card-border rounded focus:outline-none focus:ring-1 focus:ring-pos-primary" />
                             <div className="flex items-center gap-1">
                               <input type="number" value={editPrice} onChange={(e) => setEditPrice(e.target.value)}
-                                className="w-16 h-[22px] px-1.5 text-[10px] border border-[#dee2e6] rounded focus:outline-none focus:ring-1 focus:ring-[#0f7b47]" />
-                              <button onClick={saveEditItem} className="text-[9px] px-2 py-0.5 bg-[#0f7b47] text-white rounded font-medium">Save</button>
-                              <button onClick={cancelEditItem} className="text-[9px] px-2 py-0.5 border border-[#dee2e6] rounded text-[#47554d]">Cancel</button>
+                                className="w-16 h-[22px] px-1.5 text-[10px] border border-pos-card-border rounded focus:outline-none focus:ring-1 focus:ring-pos-primary" />
+                              <button onClick={saveEditItem} className="text-[9px] px-2 py-0.5 bg-pos-primary text-white rounded font-medium">Save</button>
+                              <button onClick={cancelEditItem} className="text-[9px] px-2 py-0.5 border border-pos-card-border rounded text-pos-muted">Cancel</button>
                             </div>
                           </div>
                         ) : (
                           <>
                             <div className="flex items-center gap-0 shrink-0">
-                              <button onClick={() => changeQty(item.id, -1)} className="h-5 w-5 flex items-center justify-center rounded border border-[#dee2e6] text-[#94a399] hover:text-[#111814] hover:bg-white active:scale-90"><Minus className="h-2.5 w-2.5" /></button>
+                              <button onClick={() => changeQty(item.id, -1)} className="h-5 w-5 flex items-center justify-center rounded border border-pos-card-border text-pos-muted hover:text-pos-ink hover:bg-white active:scale-90"><Minus className="h-2.5 w-2.5" /></button>
                               <span className="w-5 text-center text-[11px] font-semibold tabular-nums">{item.qty}</span>
-                              <button onClick={() => changeQty(item.id, 1)} className="h-5 w-5 flex items-center justify-center rounded border border-[#dee2e6] text-[#94a399] hover:text-[#111814] hover:bg-white active:scale-90"><Plus className="h-2.5 w-2.5" /></button>
+                              <button onClick={() => changeQty(item.id, 1)} className="h-5 w-5 flex items-center justify-center rounded border border-pos-card-border text-pos-muted hover:text-pos-ink hover:bg-white active:scale-90"><Plus className="h-2.5 w-2.5" /></button>
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="text-[11px] font-medium text-[#111814] leading-tight">{item.name}</p>
-                              <button onClick={() => startEditItem(item)} className="text-[8px] text-content-tertiary hover:text-[#0f7b47] opacity-0 group-hover:opacity-100 transition-all"><Edit className="h-2.5 w-2.5 inline mr-0.5" />Edit</button>
+                              <p className="text-[11px] font-medium text-pos-ink leading-tight">{item.name}</p>
+                              <button onClick={() => startEditItem(item)} className="text-[8px] text-content-tertiary hover:text-pos-primary opacity-0 group-hover:opacity-100 transition-all"><Edit className="h-2.5 w-2.5 inline mr-0.5" />Edit</button>
                             </div>
                             <div className="flex items-center gap-1 shrink-0">
-                              <span className="text-[11px] font-semibold tabular-nums">{currSymbol}{item.qty * item.price}</span>
-                              <button onClick={() => removeItem(item.id)} className="opacity-0 group-hover:opacity-100 text-[#94a399] hover:text-red-500"><Trash2 className="h-3 w-3" /></button>
+                              <span className="text-[11px] font-semibold tabular-nums">{money(item.qty * item.price)}</span>
+                              <button onClick={() => removeItem(item.id)} className="opacity-0 group-hover:opacity-100 text-pos-muted hover:text-red-500"><Trash2 className="h-3 w-3" /></button>
                             </div>
                           </>
                         )}
@@ -1411,44 +1430,44 @@ export default function Billing() {
                 </div>
 
                 {/* Customer / Table Info Section */}
-                <div className="border-t border-[#dee2e6] mx-2.5" />
+                <div className="border-t border-pos-card-border mx-2.5" />
                 <div className="px-3 py-2 space-y-1.5">
                   {/* Customer name row with Edit/Add/Delete */}
                   <div className="flex items-center gap-1.5 text-[10px]">
-                    <User className="h-3 w-3 text-[#94a399] shrink-0" />
+                    <User className="h-3 w-3 text-pos-muted shrink-0" />
                     {editCustomerMode && selectedCustomer ? (
                       <div className="flex-1 flex items-center gap-1">
                         <input type="text" value={editCustName} onChange={(e) => setEditCustName(e.target.value)} autoFocus placeholder="Name"
-                          className="flex-1 h-[22px] px-1.5 text-[10px] border border-[#dee2e6] rounded focus:outline-none focus:ring-1 focus:ring-[#0f7b47]" />
-                        <button onClick={saveEditCustomer} className="text-[9px] px-1.5 py-0.5 bg-[#0f7b47] text-white rounded font-medium">Save</button>
-                        <button onClick={() => setEditCustomerMode(false)} className="text-[9px] px-1.5 py-0.5 border border-[#dee2e6] rounded text-[#47554d]">Cancel</button>
+                          className="flex-1 h-[22px] px-1.5 text-[10px] border border-pos-card-border rounded focus:outline-none focus:ring-1 focus:ring-pos-primary" />
+                        <button onClick={saveEditCustomer} className="text-[9px] px-1.5 py-0.5 bg-pos-primary text-white rounded font-medium">Save</button>
+                        <button onClick={() => setEditCustomerMode(false)} className="text-[9px] px-1.5 py-0.5 border border-pos-card-border rounded text-pos-muted">Cancel</button>
                       </div>
                     ) : (
                       <>
                         {selectedCustomer ? (
-                          <span className="text-[#0f7b47] font-semibold truncate">{selectedCustomer.name}</span>
+                          <span className="text-pos-primary font-semibold truncate">{selectedCustomer.name}</span>
                         ) : selectedTable?.customer ? (
-                          <span className="text-[#111814] font-semibold">{selectedTable.customer}</span>
+                          <span className="text-pos-ink font-semibold">{selectedTable.customer}</span>
                         ) : (
-                          <span className="text-[#47554d]">Walk-in Customer</span>
+                          <span className="text-pos-muted">Walk-in Customer</span>
                         )}
                         {/* Action buttons */}
                         <div className="flex items-center gap-1 ml-auto">
                           {selectedCustomer && (
-                            <button onClick={startEditCustomer} className="p-1.5 text-[#94a399] hover:text-[#0f7b47] hover:bg-[#f0f9f4] rounded transition-colors" title="Edit customer">
+                            <button onClick={startEditCustomer} className="p-1.5 text-pos-muted hover:text-pos-primary hover:bg-pos-primary-soft rounded transition-colors" title="Edit customer">
                               <Edit className="h-3.5 w-3.5" />
                             </button>
                           )}
-                          <button onClick={() => { setShowAddCustomerForm(false); setShowCustomerModal(true); }} className="p-1.5 text-[#94a399] hover:text-[#0f7b47] hover:bg-[#f0f9f4] rounded transition-colors" title="Add/Select customer">
+                          <button onClick={() => { setShowAddCustomerForm(false); setShowCustomerModal(true); }} className="p-1.5 text-pos-muted hover:text-pos-primary hover:bg-pos-primary-soft rounded transition-colors" title="Add/Select customer">
                             <UserPlus className="h-3.5 w-3.5" />
                           </button>
                           {selectedCustomer && (
-                            <button onClick={confirmDeleteCustomer} className="p-1.5 text-[#94a399] hover:text-red-500 hover:bg-red-50 rounded transition-colors" title="Delete customer">
+                            <button onClick={confirmDeleteCustomer} className="p-1.5 text-pos-muted hover:text-red-500 hover:bg-red-50 rounded transition-colors" title="Delete customer">
                               <Trash2 className="h-3.5 w-3.5" />
                             </button>
                           )}
                           {selectedCustomer && (
-                            <button onClick={clearCustomer} className="p-1.5 text-[#94a399] hover:text-red-500 hover:bg-red-50 rounded transition-colors" title="Remove from order">
+                            <button onClick={clearCustomer} className="p-1.5 text-pos-muted hover:text-red-500 hover:bg-red-50 rounded transition-colors" title="Remove from order">
                               <X className="h-3.5 w-3.5" />
                             </button>
                           )}
@@ -1457,53 +1476,53 @@ export default function Billing() {
                     )}
                   </div>
                   {(selectedCustomer || selectedTable?.customer) && (
-                    <div className="flex items-center gap-1.5 text-[10px]"><Phone className="h-3 w-3 shrink-0 text-[#94a399]" />
-                      <span className="text-[#47554d] text-[9px]">{selectedCustomer?.phone || 'From table order'}</span>
+                    <div className="flex items-center gap-1.5 text-[10px]"><Phone className="h-3 w-3 shrink-0 text-pos-muted" />
+                      <span className="text-pos-muted text-[9px]">{selectedCustomer?.phone || 'From table order'}</span>
                     </div>
                   )}
                   {selectedTable && (
-                    <div className="flex items-center gap-1.5 text-[10px] text-[#94a399]">
+                    <div className="flex items-center gap-1.5 text-[10px] text-pos-muted">
                       <MapPin className="h-3 w-3 shrink-0" />
-                      <span className="text-[#47554d] text-[9px]">{selectedTable.section} · {selectedTable.name} · {selectedTable.capacity} seats</span>
+                      <span className="text-pos-muted text-[9px]">{selectedTable.section} · {selectedTable.name} · {selectedTable.capacity} seats</span>
                     </div>
                   )}
                   {selectedTable?.time && (
-                    <div className="flex items-center gap-1.5 text-[10px] text-[#94a399]">
+                    <div className="flex items-center gap-1.5 text-[10px] text-pos-muted">
                       <Clock className="h-3 w-3 shrink-0" />
-                      <span className="text-[#47554d] text-[9px]">Since {selectedTable.time}</span>
+                      <span className="text-pos-muted text-[9px]">Since {selectedTable.time}</span>
                     </div>
                   )}
                   <div className="flex items-center gap-1.5 text-[10px]">
-                    <FileText className="h-3 w-3 text-[#94a399] shrink-0" />
-                    <input type="text" value={kotNotes} onChange={(e) => setKotNotes(e.target.value)} placeholder="KOT notes..." className="flex-1 h-[22px] text-[9px] border border-[#dee2e6] rounded px-1.5 focus:outline-none focus:ring-1 focus:ring-[#0f7b47]" />
+                    <FileText className="h-3 w-3 text-pos-muted shrink-0" />
+                    <input type="text" value={kotNotes} onChange={(e) => setKotNotes(e.target.value)} placeholder="KOT notes..." className="flex-1 h-[22px] text-[9px] border border-pos-card-border rounded px-1.5 focus:outline-none focus:ring-1 focus:ring-pos-primary" />
                   </div>
                   <div className="flex items-center gap-1.5 text-[10px]">
-                    <UsersIcon className="h-3 w-3 text-[#94a399] shrink-0" />
+                    <UsersIcon className="h-3 w-3 text-pos-muted shrink-0" />
                     <div className="flex items-center gap-0.5">
-                      <button onClick={() => setGuestCount((g) => Math.max(1, g - 1))} className="h-[18px] w-[18px] flex items-center justify-center rounded border border-[#dee2e6]"><Minus className="h-2 w-2" /></button>
+                      <button onClick={() => setGuestCount((g) => Math.max(1, g - 1))} className="h-[18px] w-[18px] flex items-center justify-center rounded border border-pos-card-border"><Minus className="h-2 w-2" /></button>
                       <span className="w-6 text-center text-[10px] font-semibold">{guestCount}</span>
-                      <button onClick={() => setGuestCount((g) => Math.min(99, g + 1))} className="h-[18px] w-[18px] flex items-center justify-center rounded border border-[#dee2e6]"><Plus className="h-2 w-2" /></button>
+                      <button onClick={() => setGuestCount((g) => Math.min(99, g + 1))} className="h-[18px] w-[18px] flex items-center justify-center rounded border border-pos-card-border"><Plus className="h-2 w-2" /></button>
                     </div>
-                    <span className="text-[#47554d] text-[9px] ml-1">Guests</span>
+                    <span className="text-pos-muted text-[9px] ml-1">Guests</span>
                   </div>
                 </div>
 
                 {/* Coupon */}
                 <div className="px-3 pb-1 space-y-1">
                   {appliedCoupon ? (
-                    <div className="flex items-center gap-1.5 bg-[#f0f9f4] border border-[#0f7b47]/20 rounded px-2 py-1.5">
-                      <Ticket className="h-3 w-3 text-[#0f7b47] shrink-0" />
-                      <span className="text-[10px] font-semibold text-[#0f7b47]">{appliedCoupon.code}</span>
+                    <div className="flex items-center gap-1.5 bg-pos-primary-soft border border-pos-primary/20 rounded px-2 py-1.5">
+                      <Ticket className="h-3 w-3 text-pos-primary shrink-0" />
+                      <span className="text-[10px] font-semibold text-pos-primary">{appliedCoupon.code}</span>
                       {couponResult?.discount! > 0 && (
-                        <span className="text-[9px] text-[#47554d]">(-{currSymbol}{couponResult!.discount.toLocaleString('en-IN')})</span>
+                        <span className="text-[9px] text-pos-muted">(-{money(couponResult!.discount)})</span>
                       )}
                       {couponResult?.type === 'free_product' && (
-                        <span className="text-[9px] text-[#47554d]">Free: {couponResult.freeProduct}</span>
+                        <span className="text-[9px] text-pos-muted">Free: {couponResult.freeProduct}</span>
                       )}
                       {couponResult?.type === 'free_delivery' && (
-                        <span className="text-[9px] text-[#47554d]">Free Delivery</span>
+                        <span className="text-[9px] text-pos-muted">Free Delivery</span>
                       )}
-                      <button onClick={handleClearCoupon} className="ml-auto p-0.5 text-[#94a399] hover:text-red-500 rounded"><X className="h-3 w-3" /></button>
+                      <button onClick={handleClearCoupon} className="ml-auto p-0.5 text-pos-muted hover:text-red-500 rounded"><X className="h-3 w-3" /></button>
                     </div>
                   ) : (
                     <div className="flex items-center gap-1">
@@ -1513,12 +1532,12 @@ export default function Billing() {
                         onChange={(e) => { setCouponCode(e.target.value.toUpperCase()); setCouponError(null); }}
                         onKeyDown={(e) => { if (e.key === 'Enter') handleApplyCoupon(); }}
                         placeholder="Coupon code..."
-                        className="flex-1 h-[24px] px-2 text-[10px] border border-[#dee2e6] rounded focus:outline-none focus:ring-1 focus:ring-[#0f7b47]"
+                        className="flex-1 h-[24px] px-2 text-[10px] border border-pos-card-border rounded focus:outline-none focus:ring-1 focus:ring-pos-primary"
                       />
                       <button
                         onClick={handleApplyCoupon}
                         disabled={isApplyingCoupon || !couponCode.trim()}
-                        className="h-[24px] px-2.5 text-[10px] font-semibold bg-[#0f7b47] text-white rounded hover:bg-[#056638] disabled:opacity-50 transition-colors"
+                        className="h-[24px] px-2.5 text-[10px] font-semibold bg-pos-primary text-white rounded hover:bg-pos-primary-dark disabled:opacity-50 transition-colors"
                       >
                         {isApplyingCoupon ? '...' : 'Apply'}
                       </button>
@@ -1532,36 +1551,36 @@ export default function Billing() {
                 {/* Discount */}
                 <div className="px-3 pb-2 flex items-center gap-3">
                   {showDiscountInput ? (
-                    <div className="flex items-center gap-1"><input type="number" min="0" max="100" step="any" value={discountPercent || ''} onChange={(e) => { const n = parseFloat(e.target.value); setDiscountPercent(Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : 0); }} className="w-12 h-6 text-[10px] border border-[#dee2e6] rounded px-1.5 text-center focus:outline-none focus:ring-1 focus:ring-[#0f7b47]" /><span className="text-[10px] text-[#47554d]">%</span><button onClick={() => setShowDiscountInput(false)} className="text-[10px] text-[#0f7b47] font-medium">Done</button></div>
+                    <div className="flex items-center gap-1"><input type="number" min="0" max="100" step="any" value={discountPercent || ''} onChange={(e) => { const n = parseFloat(e.target.value); setDiscountPercent(Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : 0); }} className="w-12 h-6 text-[10px] border border-pos-card-border rounded px-1.5 text-center focus:outline-none focus:ring-1 focus:ring-pos-primary" /><span className="text-[10px] text-pos-muted">%</span><button onClick={() => setShowDiscountInput(false)} className="text-[10px] text-pos-primary font-medium">Done</button></div>
                   ) : (
-                    <button onClick={() => setShowDiscountInput(true)} className="text-[10px] text-[#0f7b47] font-medium hover:underline">+ Discount</button>
+                    <button onClick={() => setShowDiscountInput(true)} className="text-[10px] text-pos-primary font-medium hover:underline">+ Discount</button>
                   )}
                 </div>
               </div>
 
               {/* Totals + Print & Save KOT */}
-              <div className="border-t border-[#dee2e6] shrink-0">
-                <div className="bg-[#f3f3f4] px-3 py-2 space-y-1.5 text-[11px]">
-                  <div className="flex justify-between"><span className="text-[#757575]">Subtotal</span><span className="font-semibold tabular-nums">{currSymbol}{subtotal.toLocaleString('en-IN')}</span></div>
-                  {manualDiscount > 0 && <div className="flex justify-between"><span className="text-[#757575]">Discount ({discountPercent}%)</span><span className="font-semibold text-[#e2234e] tabular-nums">-{currSymbol}{manualDiscount.toLocaleString('en-IN')}</span></div>}
-                  {couponDiscount > 0 && <div className="flex justify-between"><span className="text-[#757575]">Coupon ({couponResult?.type})</span><span className="font-semibold text-[#e2234e] tabular-nums">-{currSymbol}{couponDiscount.toLocaleString('en-IN')}</span></div>}
-                  <div className="flex justify-between"><span className="text-[#757575]">CGST ({s.cgstRate}%)</span><span className="font-semibold tabular-nums">{currSymbol}{cgst.toLocaleString('en-IN')}</span></div>
-                  <div className="flex justify-between"><span className="text-[#757575]">SGST ({s.sgstRate}%)</span><span className="font-semibold tabular-nums">{currSymbol}{sgst.toLocaleString('en-IN')}</span></div>
+              <div className="border-t border-pos-card-border shrink-0">
+                <div className="bg-pos-ground px-3 py-2 space-y-1.5 text-[11px]">
+                  <div className="flex justify-between"><span className="text-pos-muted">Subtotal</span><span className="font-semibold tabular-nums">{money(subtotal)}</span></div>
+                  {manualDiscount > 0 && <div className="flex justify-between"><span className="text-pos-muted">Discount ({discountPercent}%)</span><span className="font-semibold text-pos-cancel-fg tabular-nums">-{money(manualDiscount)}</span></div>}
+                  {couponDiscount > 0 && <div className="flex justify-between"><span className="text-pos-muted">Coupon ({couponResult?.type})</span><span className="font-semibold text-pos-cancel-fg tabular-nums">-{money(couponDiscount)}</span></div>}
+                  <div className="flex justify-between"><span className="text-pos-muted">CGST ({s.cgstRate}%)</span><span className="font-semibold tabular-nums">{money(cgst)}</span></div>
+                  <div className="flex justify-between"><span className="text-pos-muted">SGST ({s.sgstRate}%)</span><span className="font-semibold tabular-nums">{money(sgst)}</span></div>
                 </div>
-                <div className="flex items-center justify-between px-3 py-2.5 bg-[#0f7b47]"><span className="text-[13px] font-bold text-white">Total</span><span className="text-[13px] font-bold text-white tabular-nums">{currSymbol}{total.toLocaleString('en-IN')}</span></div>
-                {s.billDetailsOnTable && <div className="px-3 py-1 bg-[#f8faf9] text-center text-[8px] text-content-tertiary">{s.billPrefix}#{s.startingBillNumber} · {s.billFooter}</div>}
+                <div className="flex items-center justify-between px-3 py-2.5 bg-pos-primary"><span className="text-[13px] font-bold text-white">Total</span><span className="text-[13px] font-bold text-white tabular-nums">{money(total)}</span></div>
+                {s.billDetailsOnTable && <div className="px-3 py-1 bg-pos-bar text-center text-[8px] text-content-tertiary">{s.billPrefix}#{s.startingBillNumber} · {s.billFooter}</div>}
 
                 {/* ── Wallet Payment ── */}
                 {canUseWallet && (
-                  <div className="px-3 py-2 bg-[#f0fdf4] border-b border-[#bbf7d0] space-y-2">
+                  <div className="px-3 py-2 bg-pos-primary-soft border-b border-pos-primary-soft space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-semibold text-[#0f7b47] flex items-center gap-1">
+                      <span className="text-[10px] font-semibold text-pos-primary flex items-center gap-1">
                         <Wallet className="h-3.5 w-3.5" />Wallet Credit
                       </span>
-                      <span className="text-[10px] font-bold text-[#0f7b47]">{currSymbol}{selectedCustomerWalletCredit.toLocaleString('en-IN')}</span>
+                      <span className="text-[10px] font-bold text-pos-primary">{money(selectedCustomerWalletCredit)}</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-[9px] text-[#47554d] whitespace-nowrap">Use wallet:</span>
+                      <span className="text-[9px] text-pos-muted whitespace-nowrap">Use wallet:</span>
                       <input
                         type="number"
                         min={0}
@@ -1572,19 +1591,19 @@ export default function Billing() {
                           setWalletAmountUsed(Math.max(0, Math.min(v, maxWalletAmount)));
                         }}
                         placeholder="0"
-                        className="flex-1 h-[28px] px-2 text-[11px] border border-[#bbf7d0] rounded focus:outline-none focus:ring-1 focus:ring-[#0f7b47] bg-white"
+                        className="flex-1 h-[28px] px-2 text-[11px] border border-pos-primary-soft rounded focus:outline-none focus:ring-1 focus:ring-pos-primary bg-white"
                       />
                       <button
                         onClick={() => setWalletAmountUsed(maxWalletAmount)}
-                        className="text-[9px] font-medium text-[#0f7b47] hover:underline whitespace-nowrap"
+                        className="text-[9px] font-medium text-pos-primary hover:underline whitespace-nowrap"
                       >
                         Max
                       </button>
                     </div>
                     {walletAmountUsed > 0 && (
                       <div className="flex items-center justify-between text-[9px]">
-                        <span className="text-[#47554d]">Remaining (Cash/Card):</span>
-                        <span className="font-bold text-[#111814] tabular-nums">{currSymbol}{remainingAfterWallet.toLocaleString('en-IN')}</span>
+                        <span className="text-pos-muted">Remaining (Cash/Card):</span>
+                        <span className="font-bold text-pos-ink tabular-nums">{money(remainingAfterWallet)}</span>
                       </div>
                     )}
                   </div>
@@ -1600,14 +1619,14 @@ export default function Billing() {
 
                 <div className="px-3 py-2 bg-white space-y-1.5">
                   <div className="grid grid-cols-2 gap-1.5">
-                    <button onClick={voidOrder} disabled={s.disableSaveBill} className={cn('flex items-center justify-center gap-1 h-8 text-[10px] font-medium border rounded active:scale-[0.98] transition-all', s.disableSaveBill ? 'opacity-40 cursor-not-allowed' : 'border-[#dee2e6] text-[#e2234e] hover:bg-red-50 hover:border-red-300')}><X className="h-3 w-3" />Cancel Order</button>
-                    <button onClick={printAndSaveKOT} disabled={orderItems.length === 0 || s.disableSaveKOT || isSavingKot} className={cn('flex items-center justify-center gap-1 h-8 text-[10px] font-bold rounded active:scale-[0.98] transition-all', orderItems.length === 0 || s.disableSaveKOT || isSavingKot ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-[#0f7b47] hover:bg-[#056638] text-white')}><Printer className="h-3 w-3" />{isSavingKot ? 'Saving...' : 'Print & Save KOT'}</button>
+                    <button onClick={voidOrder} disabled={s.disableSaveBill} className={cn('flex items-center justify-center gap-1 h-8 text-[10px] font-medium border rounded active:scale-[0.98] transition-all', s.disableSaveBill ? 'opacity-40 cursor-not-allowed' : 'border-pos-card-border text-pos-cancel-fg hover:bg-red-50 hover:border-red-300')}><X className="h-3 w-3" />Cancel Order</button>
+                    <button onClick={printAndSaveKOT} disabled={orderItems.length === 0 || s.disableSaveKOT || isSavingKot} className={cn('flex items-center justify-center gap-1 h-8 text-[10px] font-bold rounded active:scale-[0.98] transition-all', orderItems.length === 0 || s.disableSaveKOT || isSavingKot ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-pos-primary hover:bg-pos-primary-dark text-white')}><Printer className="h-3 w-3" />{isSavingKot ? 'Saving...' : 'Print & Save KOT'}</button>
                   </div>
                   {orderPlaced && <div className="text-center text-[10px] font-semibold text-success"><Check className="h-3.5 w-3.5 inline mr-1" />KOT Saved & Printed!</div>}
 
                   {/* Print Bill — Dine-in only, distinct from payment */}
                   {needsTable && selectedTableId && (
-                    <div className="pt-1 border-t border-[#dee2e6]">
+                    <div className="pt-1 border-t border-pos-card-border">
                       <button
                         onClick={handlePrintBill}
                         disabled={orderItems.length === 0}
@@ -1615,7 +1634,7 @@ export default function Billing() {
                           'w-full flex items-center justify-center gap-1 h-8 text-[10px] font-bold rounded active:scale-[0.98] transition-all',
                           orderItems.length === 0
                             ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                            : 'bg-[#f0f9f4] hover:bg-[#d4f0df] text-[#0f7b47] border border-[#0f7b47]/30',
+                            : 'bg-pos-primary-soft hover:bg-pos-primary-soft text-pos-primary border border-pos-primary/30',
                         )}
                       >
                         <FileText className="h-3 w-3" />Print Bill
@@ -1624,7 +1643,7 @@ export default function Billing() {
                   )}
 
                   {/* Payment buttons */}
-                  <div className="grid grid-cols-2 gap-1.5 pt-1 border-t border-[#dee2e6]">
+                  <div className="grid grid-cols-2 gap-1.5 pt-1 border-t border-pos-card-border">
                     <button
                       onClick={() => completePayment(false)}
                       disabled={orderItems.length === 0 || isProcessingPayment}
@@ -1632,7 +1651,7 @@ export default function Billing() {
                         'flex items-center justify-center gap-1 h-8 text-[10px] font-bold rounded active:scale-[0.98] transition-all',
                         orderItems.length === 0 || isProcessingPayment
                           ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                          : 'bg-[#0f7b47] hover:bg-[#056638] text-white',
+                          : 'bg-pos-primary hover:bg-pos-primary-dark text-white',
                       )}
                     >
                       <Banknote className="h-3 w-3" />
@@ -1645,7 +1664,7 @@ export default function Billing() {
                         'flex items-center justify-center gap-1 h-8 text-[10px] font-bold rounded active:scale-[0.98] transition-all',
                         orderItems.length === 0 || isProcessingPayment
                           ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                          : 'bg-[#056638] hover:bg-[#034d2a] text-white',
+                          : 'bg-pos-primary-dark hover:bg-pos-primary-dark text-white',
                       )}
                     >
                       <Printer className="h-3 w-3" />
@@ -1659,20 +1678,20 @@ export default function Billing() {
         </div>
 
         {/* Bottom Bar */}
-        <footer className="flex items-center justify-between h-[32px] px-3 bg-[#204937] shrink-0 gap-2">
+        <footer className="flex items-center justify-between h-[32px] px-3 bg-pos-deep shrink-0 gap-2">
           <div className="flex items-center gap-1">
-            <button onClick={newOrder} className="flex items-center gap-1 h-[22px] px-2.5 text-[9px] font-semibold bg-white text-[#204937] rounded-sm hover:bg-gray-100 active:scale-[0.98] transition-all"><Plus className="h-3 w-3" />New Order</button>
+            <button onClick={newOrder} className="flex items-center gap-1 h-[22px] px-2.5 text-[9px] font-semibold bg-white text-pos-deep rounded-sm hover:bg-gray-100 active:scale-[0.98] transition-all"><Plus className="h-3 w-3" />New Order</button>
             <button onClick={voidOrder} className="flex items-center gap-1 h-[22px] px-2 text-[9px] font-medium text-white/80 hover:text-white hover:bg-white/10 rounded-sm active:scale-[0.98] transition-all"><MinusCircle className="h-3 w-3" />Cancel Order</button>
             <button onClick={() => { notifyPrint('Sending to printer...'); setTimeout(() => notifySuccess('Printed!'), 800); }} className="flex items-center gap-1 h-[22px] px-2 text-[9px] font-medium text-white/80 hover:text-white hover:bg-white/10 rounded-sm active:scale-[0.98] transition-all"><Printer className="h-3 w-3" />Print</button>
           </div>
           <div className="flex items-center gap-3 text-[9px] text-white/60">
             <span>Table: <span className="text-white font-semibold">{selectedTable ? selectedTable.name : '—'}</span></span>
             <span>Items: <span className="text-white font-semibold">{orderItems.reduce((_s, i) => _s + i.qty, 0)}</span></span>
-            <span>Total: <span className="text-white font-semibold">{currSymbol}{total.toLocaleString('en-IN')}</span></span>
+            <span>Total: <span className="text-white font-semibold">{money(total)}</span></span>
           </div>
           <span className="text-[9px] text-white/70 flex items-center gap-1.5">
             <span className="text-white/50">{currSymbol}</span>
-            <span className="text-white font-semibold">{total.toLocaleString('en-IN')}</span>
+            <span className="text-white font-semibold">{total.toLocaleString(currencyCode === 'INR' ? 'en-IN' : 'en-US')}</span>
           </span>
         </footer>
       </div>
@@ -1681,17 +1700,17 @@ export default function Billing() {
       {showDeleteCustConfirm && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" onClick={(e) => { if (e.target === e.currentTarget) setShowDeleteCustConfirm(false); }}>
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-          <div className="relative w-full max-w-[320px] bg-white rounded-xl shadow-2xl border border-[#dee2e6] p-6 text-center animate-slide-up">
+          <div className="relative w-full max-w-[320px] bg-white rounded-xl shadow-2xl border border-pos-card-border p-6 text-center animate-slide-up">
             <div className="h-12 w-12 mx-auto mb-3 rounded-full bg-red-100 flex items-center justify-center">
               <AlertTriangle className="h-6 w-6 text-red-500" />
             </div>
-            <h3 className="text-[14px] font-bold text-[#111814] mb-1">Delete Customer?</h3>
+            <h3 className="text-[14px] font-bold text-pos-ink mb-1">Delete Customer?</h3>
             <p className="text-[11px] text-content-secondary mb-4">
-              Are you sure you want to delete <span className="font-semibold text-[#111814]">{selectedCustomer?.name}</span>? This action cannot be undone.
+              Are you sure you want to delete <span className="font-semibold text-pos-ink">{selectedCustomer?.name}</span>? This action cannot be undone.
             </p>
             <div className="flex gap-2">
               <button onClick={() => setShowDeleteCustConfirm(false)}
-                className="flex-1 h-[34px] text-[11px] font-medium border border-[#dee2e6] text-[#47554d] rounded-lg hover:bg-[#f1f5f2] transition-colors">
+                className="flex-1 h-[34px] text-[11px] font-medium border border-pos-card-border text-pos-muted rounded-lg hover:bg-pos-ground transition-colors">
                 Cancel
               </button>
               <button onClick={executeDeleteCustomer}
@@ -1707,19 +1726,19 @@ export default function Billing() {
       {showPrintView && (
         <div className="fixed inset-0 z-[999] flex items-center justify-center p-4" onClick={(e) => { if (e.target === e.currentTarget) setShowPrintView(false); }}>
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-          <div className="relative w-[360px] bg-white rounded-xl shadow-2xl border border-[#dee2e6] overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-[#dee2e6] bg-[#f8faf9]">
-              <h3 className="text-[13px] font-bold text-[#111814]">KOT Print Preview</h3>
-              <button onClick={() => setShowPrintView(false)} className="p-1 rounded text-[#94a399] hover:text-[#111814] hover:bg-[#e2e8e4]"><X className="h-4 w-4" /></button>
+          <div className="relative w-[360px] bg-white rounded-xl shadow-2xl border border-pos-card-border overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-pos-card-border bg-pos-bar">
+              <h3 className="text-[13px] font-bold text-pos-ink">KOT Print Preview</h3>
+              <button onClick={() => setShowPrintView(false)} className="p-1 rounded text-pos-muted hover:text-pos-ink hover:bg-pos-card-border"><X className="h-4 w-4" /></button>
             </div>
             <div className="p-4">
               {/* KOT Receipt */}
-              <div className="bg-white border-2 border-dashed border-[#dee2e6] rounded-lg p-4 font-mono text-[10px] leading-relaxed">
+              <div className="bg-white border-2 border-dashed border-pos-card-border rounded-lg p-4 font-mono text-[10px] leading-relaxed">
                 <div className="text-center font-bold text-[12px] mb-1">{s.restaurantName || 'Nexora Solution'}</div>
                 <div className="text-center text-[9px] text-content-tertiary mb-1">{s.address}</div>
                 {(s.phone || s.email) && <div className="text-center text-[8px] text-content-tertiary mb-1">{[s.phone, s.email].filter(Boolean).join(' · ')}</div>}
                 {s.gstNo && <div className="text-center text-[8px] text-content-tertiary mb-2">GST: {s.gstNo}</div>}
-                <div className="border-t border-dashed border-[#dee2e6] pt-2">
+                <div className="border-t border-dashed border-pos-card-border pt-2">
                   <div className="flex justify-between mb-0.5"><span>KOT No:</span><span className="font-bold">#{s.startingBillNumber}</span></div>
                   {selectedTable && <div className="flex justify-between mb-0.5"><span>Table:</span><span className="font-semibold">{selectedTable.name}</span></div>}
                   <div className="flex justify-between mb-0.5"><span>Date:</span><span>{new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span></div>
@@ -1727,28 +1746,28 @@ export default function Billing() {
                   {selectedCustomer && <div className="flex justify-between mb-0.5"><span>Customer:</span><span className="font-semibold">{selectedCustomer.name}</span></div>}
                   <div className="flex justify-between mb-0.5"><span>Guests:</span><span>{guestCount}</span></div>
                 </div>
-                <div className="border-t border-dashed border-[#dee2e6] mt-2 pt-2">
+                <div className="border-t border-dashed border-pos-card-border mt-2 pt-2">
                   <div className="flex justify-between font-bold text-[9px] mb-1"><span>Item</span><span>Qty × Price</span><span>Amt</span></div>
                   {orderItems.map((item) => (
                     <div key={item.id} className="flex justify-between text-[9px]">
                       <span className="truncate max-w-[120px]">{item.name}</span>
-                      <span>{item.qty} × {currSymbol}{item.price}</span>
-                      <span className="tabular-nums font-semibold">{currSymbol}{item.qty * item.price}</span>
+                      <span>{item.qty} × {money(item.price)}</span>
+                      <span className="tabular-nums font-semibold">{money(item.qty * item.price)}</span>
                     </div>
                   ))}
                 </div>
-                {kotNotes && <div className="border-t border-dashed border-[#dee2e6] mt-2 pt-1 text-[9px]"><span className="font-semibold">Note:</span> {kotNotes}</div>}
-                <div className="border-t border-dashed border-[#dee2e6] mt-2 pt-2">
-                  <div className="flex justify-between"><span>Subtotal</span><span className="tabular-nums">{currSymbol}{subtotal.toLocaleString('en-IN')}</span></div>
-                  {discount > 0 && <div className="flex justify-between text-[#e2234e]"><span>Discount ({discountPercent}%)</span><span className="tabular-nums">-{currSymbol}{discount.toLocaleString('en-IN')}</span></div>}
-                  <div className="flex justify-between"><span>CGST ({s.cgstRate}%)</span><span className="tabular-nums">{currSymbol}{cgst.toLocaleString('en-IN')}</span></div>
-                  <div className="flex justify-between"><span>SGST ({s.sgstRate}%)</span><span className="tabular-nums">{currSymbol}{sgst.toLocaleString('en-IN')}</span></div>
-                  <div className="flex justify-between font-bold text-[11px] mt-1 pt-1 border-t border-[#dee2e6]"><span>TOTAL</span><span className="tabular-nums">{currSymbol}{total.toLocaleString('en-IN')}</span></div>
+                {kotNotes && <div className="border-t border-dashed border-pos-card-border mt-2 pt-1 text-[9px]"><span className="font-semibold">Note:</span> {kotNotes}</div>}
+                <div className="border-t border-dashed border-pos-card-border mt-2 pt-2">
+                  <div className="flex justify-between"><span>Subtotal</span><span className="tabular-nums">{money(subtotal)}</span></div>
+                  {discount > 0 && <div className="flex justify-between text-pos-cancel-fg"><span>Discount ({discountPercent}%)</span><span className="tabular-nums">-{money(discount)}</span></div>}
+                  <div className="flex justify-between"><span>CGST ({s.cgstRate}%)</span><span className="tabular-nums">{money(cgst)}</span></div>
+                  <div className="flex justify-between"><span>SGST ({s.sgstRate}%)</span><span className="tabular-nums">{money(sgst)}</span></div>
+                  <div className="flex justify-between font-bold text-[11px] mt-1 pt-1 border-t border-pos-card-border"><span>TOTAL</span><span className="tabular-nums">{money(total)}</span></div>
                   {walletAmountUsed > 0 && (
-                    <div className="mt-2 pt-2 border-t border-dashed border-[#dee2e6]">
-                      <div className="flex justify-between text-[9px]"><span className="text-[#0f7b47] font-semibold">Paid via Wallet</span><span className="tabular-nums font-semibold text-[#0f7b47]">{currSymbol}{walletAmountUsed.toLocaleString('en-IN')}</span></div>
+                    <div className="mt-2 pt-2 border-t border-dashed border-pos-card-border">
+                      <div className="flex justify-between text-[9px]"><span className="text-pos-primary font-semibold">Paid via Wallet</span><span className="tabular-nums font-semibold text-pos-primary">{money(walletAmountUsed)}</span></div>
                       {remainingAfterWallet > 0 && (
-                        <div className="flex justify-between text-[9px] mt-0.5"><span className="text-[#47554d]">Balance (Cash/Card)</span><span className="tabular-nums">{currSymbol}{remainingAfterWallet.toLocaleString('en-IN')}</span></div>
+                        <div className="flex justify-between text-[9px] mt-0.5"><span className="text-pos-muted">Balance (Cash/Card)</span><span className="tabular-nums">{money(remainingAfterWallet)}</span></div>
                       )}
                     </div>
                   )}
@@ -1768,24 +1787,24 @@ export default function Billing() {
       {showCustomerModal && (
         <div className="fixed inset-0 z-[999] flex items-center justify-center p-4" onClick={(e) => { if (e.target === e.currentTarget) { setShowCustomerModal(false); setShowAddCustomerForm(false); setCustomerSearchQuery(''); } }}>
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-          <div className="relative w-full max-w-md bg-white rounded-xl shadow-2xl border border-[#dee2e6] overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-[#dee2e6] bg-[#f8faf9]"><h3 className="text-[13px] font-bold text-[#111814]">{showAddCustomerForm ? 'Add Customer' : 'Select Customer'}</h3><button onClick={() => { setShowCustomerModal(false); setShowAddCustomerForm(false); }} className="p-1 rounded text-[#94a399] hover:text-[#111814] hover:bg-[#e2e8e4]"><X className="h-4 w-4" /></button></div>
+          <div className="relative w-full max-w-md bg-white rounded-xl shadow-2xl border border-pos-card-border overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-pos-card-border bg-pos-bar"><h3 className="text-[13px] font-bold text-pos-ink">{showAddCustomerForm ? 'Add Customer' : 'Select Customer'}</h3><button onClick={() => { setShowCustomerModal(false); setShowAddCustomerForm(false); }} className="p-1 rounded text-pos-muted hover:text-pos-ink hover:bg-pos-card-border"><X className="h-4 w-4" /></button></div>
             {showAddCustomerForm ? (
               <div className="p-4 space-y-3">
-                <div><label className="block text-[10px] font-semibold text-[#47554d] mb-1">Name *</label><input type="text" value={newCustName} onChange={(e) => setNewCustName(e.target.value)} placeholder="Name" autoFocus className="w-full h-[32px] px-2.5 text-[11px] border border-[#dee2e6] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#0f7b47]" /></div>
-                <div><label className="block text-[10px] font-semibold text-[#47554d] mb-1">Phone *</label><input type="tel" value={newCustPhone} onChange={(e) => setNewCustPhone(e.target.value)} placeholder="+91 XXXXXXXXXX" className="w-full h-[32px] px-2.5 text-[11px] border border-[#dee2e6] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#0f7b47]" /></div>
-                <div className="flex gap-2 pt-1"><button onClick={() => { setShowAddCustomerForm(false); setNewCustName(''); setNewCustPhone(''); }} className="flex-1 h-[34px] text-[11px] font-medium border border-[#dee2e6] text-[#47554d] rounded-lg hover:bg-[#f1f5f2]">Back</button><button onClick={handleQuickAddCustomer} disabled={!newCustName.trim() || !newCustPhone.trim()} className="flex-1 h-[34px] text-[11px] font-semibold bg-[#0f7b47] text-white rounded-lg hover:bg-[#056638] disabled:opacity-50">Add & Select</button></div>
+                <div><label className="block text-[10px] font-semibold text-pos-muted mb-1">Name *</label><input type="text" value={newCustName} onChange={(e) => setNewCustName(e.target.value)} placeholder="Name" autoFocus className="w-full h-[32px] px-2.5 text-[11px] border border-pos-card-border rounded-lg focus:outline-none focus:ring-1 focus:ring-pos-primary" /></div>
+                <div><label className="block text-[10px] font-semibold text-pos-muted mb-1">Phone *</label><input type="tel" value={newCustPhone} onChange={(e) => setNewCustPhone(e.target.value)} placeholder="+91 XXXXXXXXXX" className="w-full h-[32px] px-2.5 text-[11px] border border-pos-card-border rounded-lg focus:outline-none focus:ring-1 focus:ring-pos-primary" /></div>
+                <div className="flex gap-2 pt-1"><button onClick={() => { setShowAddCustomerForm(false); setNewCustName(''); setNewCustPhone(''); }} className="flex-1 h-[34px] text-[11px] font-medium border border-pos-card-border text-pos-muted rounded-lg hover:bg-pos-ground">Back</button><button onClick={handleQuickAddCustomer} disabled={!newCustName.trim() || !newCustPhone.trim()} className="flex-1 h-[34px] text-[11px] font-semibold bg-pos-primary text-white rounded-lg hover:bg-pos-primary-dark disabled:opacity-50">Add & Select</button></div>
               </div>
             ) : (
               <>
-                <div className="px-4 py-2.5 border-b border-[#dee2e6]"><div className="relative"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#94a399]" /><input type="text" value={customerSearchQuery} onChange={(e) => setCustomerSearchQuery(e.target.value)} placeholder="Search..." autoFocus className="w-full h-[34px] pl-8 pr-3 text-[11px] border border-[#dee2e6] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#0f7b47]" /></div></div>
+                <div className="px-4 py-2.5 border-b border-pos-card-border"><div className="relative"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-pos-muted" /><input type="text" value={customerSearchQuery} onChange={(e) => setCustomerSearchQuery(e.target.value)} placeholder="Search..." autoFocus className="w-full h-[34px] pl-8 pr-3 text-[11px] border border-pos-card-border rounded-lg focus:outline-none focus:ring-1 focus:ring-pos-primary" /></div></div>
                 <div className="max-h-[300px] overflow-auto">
-                  <button onClick={() => selectCustomer(null)} className={cn('w-full flex items-center gap-3 px-4 py-3 border-b border-[#f0f0f0]', !selectedCustomerId ? 'bg-[#f0f9f4]' : 'hover:bg-[#f8faf9]')}><div className="h-8 w-8 rounded-full bg-[#f1f5f2] flex items-center justify-center"><User className="h-4 w-4 text-[#94a399]" /></div><div><p className="text-[12px] font-semibold text-[#111814]">Walk-in</p></div>{!selectedCustomerId && <Check className="h-4 w-4 text-[#0f7b47] ml-auto" />}</button>
+                  <button onClick={() => selectCustomer(null)} className={cn('w-full flex items-center gap-3 px-4 py-3 border-b border-pos-divider', !selectedCustomerId ? 'bg-pos-primary-soft' : 'hover:bg-pos-bar')}><div className="h-8 w-8 rounded-full bg-pos-ground flex items-center justify-center"><User className="h-4 w-4 text-pos-muted" /></div><div><p className="text-[12px] font-semibold text-pos-ink">Walk-in</p></div>{!selectedCustomerId && <Check className="h-4 w-4 text-pos-primary ml-auto" />}</button>
                   {filteredCustomers.map((cust) => (
-                    <button key={cust.id} onClick={() => selectCustomer(cust.id)} className={cn('w-full flex items-center gap-3 px-4 py-3 border-b border-[#f0f0f0]', selectedCustomerId === cust.id ? 'bg-[#f0f9f4]' : 'hover:bg-[#f8faf9]')}><div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center"><span className="text-[11px] font-bold text-[#0f7b47]">{cust.name.charAt(0)}</span></div><div className="flex-1 min-w-0"><p className="text-[12px] font-semibold text-[#111814] truncate">{cust.name}</p><p className="text-[10px] text-[#94a399] truncate">{cust.phone}</p></div>{selectedCustomerId === cust.id && <Check className="h-4 w-4 text-[#0f7b47]" />}</button>
+                    <button key={cust.id} onClick={() => selectCustomer(cust.id)} className={cn('w-full flex items-center gap-3 px-4 py-3 border-b border-pos-divider', selectedCustomerId === cust.id ? 'bg-pos-primary-soft' : 'hover:bg-pos-bar')}><div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center"><span className="text-[11px] font-bold text-pos-primary">{cust.name.charAt(0)}</span></div><div className="flex-1 min-w-0"><p className="text-[12px] font-semibold text-pos-ink truncate">{cust.name}</p><p className="text-[10px] text-pos-muted truncate">{cust.phone}</p></div>{selectedCustomerId === cust.id && <Check className="h-4 w-4 text-pos-primary" />}</button>
                   ))}
                 </div>
-                <div className="border-t border-[#dee2e6] px-4 py-2.5 bg-[#f8faf9]"><button onClick={() => { setShowAddCustomerForm(true); setNewCustName(''); setNewCustPhone(''); }} className="w-full flex items-center justify-center gap-1.5 h-[34px] text-[11px] font-semibold text-[#0f7b47] border border-dashed border-[#0f7b47]/40 rounded-lg hover:bg-[#f0f9f4]"><UserPlus className="h-3.5 w-3.5" />Add Customer</button></div>
+                <div className="border-t border-pos-card-border px-4 py-2.5 bg-pos-bar"><button onClick={() => { setShowAddCustomerForm(true); setNewCustName(''); setNewCustPhone(''); }} className="w-full flex items-center justify-center gap-1.5 h-[34px] text-[11px] font-semibold text-pos-primary border border-dashed border-pos-primary/40 rounded-lg hover:bg-pos-primary-soft"><UserPlus className="h-3.5 w-3.5" />Add Customer</button></div>
               </>
             )}
           </div>
@@ -1796,18 +1815,18 @@ export default function Billing() {
       {showShiftToTablePicker && (
         <div className="fixed inset-0 z-[999] flex items-center justify-center p-4" onClick={(e) => { if (e.target === e.currentTarget) setShowShiftToTablePicker(false); }}>
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-          <div className="relative w-full max-w-md bg-white rounded-xl shadow-2xl border border-[#dee2e6] overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-[#dee2e6] bg-[#f8faf9]">
-              <h3 className="text-[13px] font-bold text-[#111814]">Shift to Table</h3>
-              <button onClick={() => setShowShiftToTablePicker(false)} className="p-1 rounded text-[#94a399] hover:text-[#111814] hover:bg-[#e2e8e4]"><X className="h-4 w-4" /></button>
+          <div className="relative w-full max-w-md bg-white rounded-xl shadow-2xl border border-pos-card-border overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-pos-card-border bg-pos-bar">
+              <h3 className="text-[13px] font-bold text-pos-ink">Shift to Table</h3>
+              <button onClick={() => setShowShiftToTablePicker(false)} className="p-1 rounded text-pos-muted hover:text-pos-ink hover:bg-pos-card-border"><X className="h-4 w-4" /></button>
             </div>
             <div className="max-h-[350px] overflow-auto p-2">
               {tables.length === 0 ? (
-                <div className="text-center py-8 text-[#94a399] text-[11px]">No tables loaded</div>
+                <div className="text-center py-8 text-pos-muted text-[11px]">No tables loaded</div>
               ) : (
                 tables.map((t) => (
                   <button key={t.id} onClick={() => shiftToTable(t)}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-[#f8faf9] border-b border-[#f0f0f0] text-left transition-colors">
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-pos-bar border-b border-pos-divider text-left transition-colors">
                     <div className={cn('h-8 w-8 rounded-lg flex items-center justify-center text-[10px] font-bold',
                       t.status === 'available' ? 'bg-emerald-50 text-emerald-600' :
                       t.status === 'occupied' ? 'bg-amber-50 text-amber-600' :
@@ -1815,10 +1834,10 @@ export default function Billing() {
                       {t.name.slice(0, 3)}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-[12px] font-semibold text-[#111814]">{t.name}</p>
-                      <p className="text-[9px] text-[#94a399]">{t.section} · {t.capacity} seats · {t.status}</p>
+                      <p className="text-[12px] font-semibold text-pos-ink">{t.name}</p>
+                      <p className="text-[9px] text-pos-muted">{t.section} · {t.capacity} seats · {t.status}</p>
                     </div>
-                    <span className="text-[9px] text-[#0f7b47] font-medium">Select →</span>
+                    <span className="text-[9px] text-pos-primary font-medium">Select →</span>
                   </button>
                 ))
               )}
@@ -1831,26 +1850,26 @@ export default function Billing() {
       {showShiftTablePicker && (
         <div className="fixed inset-0 z-[999] flex items-center justify-center p-4" onClick={(e) => { if (e.target === e.currentTarget) setShowShiftTablePicker(false); }}>
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-          <div className="relative w-full max-w-md bg-white rounded-xl shadow-2xl border border-[#dee2e6] overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-[#dee2e6] bg-[#f8faf9]">
-              <h3 className="text-[13px] font-bold text-[#111814]">Shift Table — currently: {selectedTable?.name || '—'}</h3>
-              <button onClick={() => setShowShiftTablePicker(false)} className="p-1 rounded text-[#94a399] hover:text-[#111814] hover:bg-[#e2e8e4]"><X className="h-4 w-4" /></button>
+          <div className="relative w-full max-w-md bg-white rounded-xl shadow-2xl border border-pos-card-border overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-pos-card-border bg-pos-bar">
+              <h3 className="text-[13px] font-bold text-pos-ink">Shift Table — currently: {selectedTable?.name || '—'}</h3>
+              <button onClick={() => setShowShiftTablePicker(false)} className="p-1 rounded text-pos-muted hover:text-pos-ink hover:bg-pos-card-border"><X className="h-4 w-4" /></button>
             </div>
             <div className="max-h-[350px] overflow-auto p-2">
               {tables.filter((t) => t.id !== selectedTableId && t.status === 'available').length === 0 ? (
-                <div className="text-center py-8 text-[#94a399] text-[11px]">No available tables to shift to</div>
+                <div className="text-center py-8 text-pos-muted text-[11px]">No available tables to shift to</div>
               ) : (
                 tables.filter((t) => t.id !== selectedTableId && t.status === 'available').map((t) => (
                   <button key={t.id} onClick={() => shiftTable(t)}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-[#f8faf9] border-b border-[#f0f0f0] text-left transition-colors">
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-pos-bar border-b border-pos-divider text-left transition-colors">
                     <div className="h-8 w-8 rounded-lg bg-emerald-50 flex items-center justify-center text-[10px] font-bold text-emerald-600">
                       {t.name.slice(0, 3)}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-[12px] font-semibold text-[#111814]">{t.name}</p>
-                      <p className="text-[9px] text-[#94a399]">{t.section} · {t.capacity} seats · available</p>
+                      <p className="text-[12px] font-semibold text-pos-ink">{t.name}</p>
+                      <p className="text-[9px] text-pos-muted">{t.section} · {t.capacity} seats · available</p>
                     </div>
-                    <span className="text-[9px] text-[#0f7b47] font-medium">Move →</span>
+                    <span className="text-[9px] text-pos-primary font-medium">Move →</span>
                   </button>
                 ))
               )}

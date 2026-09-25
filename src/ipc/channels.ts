@@ -13,8 +13,7 @@ export const IPC_CHANNELS = {
   AUTH_STATE_CHANGED: 'auth:stateChanged',
 
   // Database
-  DB_QUERY: 'db:query',
-  DB_EXECUTE: 'db:execute',
+  DB_GET_MAX_ORDER_NUMBER: 'db:getMaxOrderNumber',
 
   // App
   APP_GET_VERSION: 'app:getVersion',
@@ -38,6 +37,11 @@ export const IPC_CHANNELS = {
   FIRESTORE_RECIPES_UPDATE: 'firestore:recipes:update',
 
   FIRESTORE_TABLES_LIST: 'firestore:tables:list',
+
+  /** Workspace document (workspaces/{workspaceId}) — currency only. */
+  FIRESTORE_WORKSPACE_GET: 'firestore:workspace:get',
+  FIRESTORE_WORKSPACE_LISTEN: 'firestore:workspace:listen',
+  FIRESTORE_WORKSPACE_LISTEN_STOP: 'firestore:workspace:listen:stop',
 
   FIRESTORE_MENU_ITEMS_LIST: 'firestore:menuItems:list',
   FIRESTORE_MENU_ITEMS_LISTEN: 'firestore:menuItems:listen',

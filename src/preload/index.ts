@@ -30,10 +30,10 @@ const api = {
     },
   },
   db: {
-    query: (sql: string, params?: unknown[]) =>
-      ipcRenderer.invoke(IPC_CHANNELS.DB_QUERY, { sql, params }),
-    execute: (sql: string, params?: unknown[]) =>
-      ipcRenderer.invoke(IPC_CHANNELS.DB_EXECUTE, { sql, params }),
+    // Named, fixed-query channels only. The former `query`/`execute` pair let
+    // the renderer run arbitrary SQL against the local database.
+    getMaxOrderNumber: (): Promise<number> =>
+      ipcRenderer.invoke(IPC_CHANNELS.DB_GET_MAX_ORDER_NUMBER),
   },
   firestore: {
     payments: {
@@ -69,6 +69,31 @@ const api = {
     tables: {
       list: (workspaceId: string) =>
         ipcRenderer.invoke(IPC_CHANNELS.FIRESTORE_TABLES_LIST, { workspaceId }),
+    },
+    workspace: {
+      get: (workspaceId: string) =>
+        ipcRenderer.invoke(IPC_CHANNELS.FIRESTORE_WORKSPACE_GET, { workspaceId }),
+      subscribe: (workspaceId: string) =>
+        ipcRenderer.invoke(IPC_CHANNELS.FIRESTORE_WORKSPACE_LISTEN, { workspaceId }),
+      unsubscribe: () =>
+        ipcRenderer.invoke(IPC_CHANNELS.FIRESTORE_WORKSPACE_LISTEN_STOP),
+      onChanged: (
+        callback: (payload: {
+          workspaceId: string;
+          currency: string | null;
+          currencySymbol: string;
+          exists: boolean;
+        }) => void,
+      ) => {
+        const handler = (
+          _event: Electron.IpcRendererEvent,
+          payload: { workspaceId: string; currency: string | null; currencySymbol: string; exists: boolean },
+        ) => callback(payload);
+        ipcRenderer.on('firestore:workspace:changed', handler);
+        return () => {
+          ipcRenderer.removeListener('firestore:workspace:changed', handler);
+        };
+      },
     },
     menuItems: {
       list: (workspaceId: string) =>

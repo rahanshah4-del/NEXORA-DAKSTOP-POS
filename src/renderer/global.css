@@ -1,3 +1,10 @@
+/* ───── Bundled fonts (offline; Vite emits the woff2 into the build) ───── */
+@import '@fontsource-variable/bricolage-grotesque/wght.css';
+@import '@fontsource/instrument-sans/400.css';
+@import '@fontsource/instrument-sans/500.css';
+@import '@fontsource/instrument-sans/600.css';
+@import '@fontsource/instrument-sans/700.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -82,6 +89,45 @@
   --z-modal: 70;
   --z-toast: 80;
   --z-tooltip: 90;
+
+  /* ───── POS design tokens (approved dashboard mockup) ───── */
+  --pos-ground: 243 241 234;        /* #F3F1EA page background */
+  --pos-bar: 248 247 242;           /* #F8F7F2 top bar + footer */
+  --pos-card: 255 255 255;          /* #FFFFFF */
+  --pos-card-border: 227 224 214;   /* #E3E0D6 */
+  --pos-divider: 238 235 226;       /* #EEEBE2 */
+  --pos-grid: 238 235 226;          /* #EEEBE2 chart gridlines */
+  --pos-axis: 215 211 198;          /* #D7D3C6 */
+
+  --pos-ink: 14 31 23;              /* #0E1F17 primary text */
+  --pos-muted: 86 101 92;           /* #56655C secondary text — never lighter */
+
+  --pos-primary: 15 123 71;         /* #0F7B47 */
+  --pos-primary-dark: 11 94 54;     /* #0B5E36 */
+  --pos-primary-soft: 227 243 234;  /* #E3F3EA */
+
+  --pos-deep: 11 51 34;             /* #0B3322 hero + quick actions */
+  --pos-rail: 10 38 24;             /* #0A2618 */
+  --pos-deep-tile: 20 70 48;        /* #144630 */
+  --pos-deep-border: 30 78 55;      /* #1E4E37 */
+  --pos-on-deep-muted: 169 201 183; /* #A9C9B7 */
+  --pos-rail-icon: 169 189 178;     /* #A9BDB2 */
+
+  --pos-lime: 198 243 106;          /* #C6F36A */
+  --pos-lime-border: 141 180 60;    /* #8DB43C */
+  --pos-mid: 111 178 142;           /* #6FB28E */
+  --pos-pale: 201 221 209;          /* #C9DDD1 */
+
+  /* Status pills */
+  --pos-paid-bg: 227 243 234;       --pos-paid-fg: 11 94 54;
+  --pos-prep-bg: 227 236 248;       --pos-prep-fg: 31 78 140;
+  --pos-pending-bg: 251 238 220;    --pos-pending-fg: 138 75 11;
+  --pos-cancel-bg: 246 227 227;     --pos-cancel-fg: 140 31 31;
+
+  /* Radii — exact px, independent of the 13px root font */
+  --pos-radius-card: 20px;
+  --pos-radius-tile: 14px;
+  --pos-radius-btn: 12px;
 }
 
 /* ───── Base Styles ───── */

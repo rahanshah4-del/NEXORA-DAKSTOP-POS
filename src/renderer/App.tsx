@@ -4,6 +4,7 @@ import { AuthProvider } from '@/components/auth/AuthProvider';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 import { ToastContainer } from '@/components/shared/ToastContainer';
 import { useMenuSync } from '@/hooks/firestore/useMenuSync';
+import { useWorkspaceCurrency } from '@/hooks/useWorkspaceCurrency';
 import { router } from '@/router';
 
 const queryClient = new QueryClient({
@@ -25,6 +26,7 @@ const queryClient = new QueryClient({
 // AppLayout, which previously meant the listener was torn down there).
 function MenuSyncBridge() {
   useMenuSync();
+  useWorkspaceCurrency();
   return null;
 }
 

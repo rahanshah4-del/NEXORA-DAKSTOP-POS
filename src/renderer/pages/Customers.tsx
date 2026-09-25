@@ -1,4 +1,5 @@
-import { useCurrencySymbol } from '@/hooks/useCurrency';
+import { useWorkspaceCurrencyValue } from '@/hooks/useWorkspaceCurrency';
+import { formatWorkspaceMoney } from '@/utils/workspaceMoney';
 import { useAuthStore } from '@/stores/auth-store';
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { PageContainer } from '@/components/layout/PageContainer';
@@ -24,7 +25,9 @@ import type { PosCustomer } from '@/../firebase/firestore-pos';
 type Customer = PosCustomer;
 
 export default function Customers() {
-  const currSymbol = useCurrencySymbol();
+  const { currencyCode, currencySymbol: currencyOverride } = useWorkspaceCurrencyValue();
+  /** All amounts on this screen are already in major units (rupees). */
+  const money = (amount: number) => formatWorkspaceMoney(amount, currencyCode, currencyOverride);
   const staffProfile = useAuthStore((s) => s.staffProfile);
   const wsId = staffProfile?.workspaceId;
 
@@ -191,15 +194,15 @@ export default function Customers() {
         </div>
         <div className="bg-white border border-border rounded-xl p-3">
           <div className="flex items-center gap-2 text-xs text-content-secondary mb-1"><Wallet className="h-3.5 w-3.5" />Wallet Balance</div>
-          <p className="text-lg font-bold text-success">{currSymbol}{totalWallet.toLocaleString('en-IN')}</p>
+          <p className="text-lg font-bold text-success">{money(totalWallet)}</p>
         </div>
         <div className="bg-white border border-border rounded-xl p-3">
           <div className="flex items-center gap-2 text-xs text-content-secondary mb-1"><AlertTriangle className="h-3.5 w-3.5" />Outstanding</div>
-          <p className={cn('text-lg font-bold', totalDues > 0 ? 'text-danger' : 'text-content')}>{currSymbol}{totalDues.toLocaleString('en-IN')}</p>
+          <p className={cn('text-lg font-bold', totalDues > 0 ? 'text-danger' : 'text-content')}>{money(totalDues)}</p>
         </div>
         <div className="bg-white border border-border rounded-xl p-3">
           <div className="flex items-center gap-2 text-xs text-content-secondary mb-1"><IndianRupee className="h-3.5 w-3.5" />Total Spent</div>
-          <p className="text-lg font-bold text-content">{currSymbol}{totalSpent.toLocaleString('en-IN')}</p>
+          <p className="text-lg font-bold text-content">{money(totalSpent)}</p>
         </div>
       </div>
 
@@ -249,8 +252,8 @@ export default function Customers() {
                     <div className="flex items-center gap-2">
                       <p className="text-sm font-semibold text-content">{cust.name || 'Unknown'}</p>
                       {isInactive && <Badge variant="danger" size="sm">Inactive</Badge>}
-                      {cDues > 0 && <Badge variant="danger" size="sm">{currSymbol}{cDues.toLocaleString('en-IN')} due</Badge>}
-                      {cWallet > 0 && <Badge variant="success" size="sm">{currSymbol}{cWallet.toLocaleString('en-IN')} wallet</Badge>}
+                      {cDues > 0 && <Badge variant="danger" size="sm">{money(cDues)} due</Badge>}
+                      {cWallet > 0 && <Badge variant="success" size="sm">{money(cWallet)} wallet</Badge>}
                       {cust.customerType && cust.customerType !== 'General' && <Badge variant="info" size="sm">{cust.customerType}</Badge>}
                     </div>
                     <div className="flex items-center gap-3 mt-0.5 text-[11px] text-content-secondary">
@@ -262,8 +265,8 @@ export default function Customers() {
                   {/* Stats */}
                   <div className="flex items-center gap-4 text-center shrink-0">
                     <div><p className="text-[10px] text-content-tertiary">Orders</p><p className="text-xs font-semibold">{cOrders}</p></div>
-                    <div><p className="text-[10px] text-content-tertiary">Spent</p><p className="text-xs font-semibold">{currSymbol}{cSpent.toLocaleString('en-IN')}</p></div>
-                    <div><p className="text-[10px] text-content-tertiary">Wallet</p><p className={cn('text-xs font-semibold', cWallet > 0 ? 'text-success' : 'text-content-tertiary')}>{currSymbol}{cWallet.toLocaleString('en-IN')}</p></div>
+                    <div><p className="text-[10px] text-content-tertiary">Spent</p><p className="text-xs font-semibold">{money(cSpent)}</p></div>
+                    <div><p className="text-[10px] text-content-tertiary">Wallet</p><p className={cn('text-xs font-semibold', cWallet > 0 ? 'text-success' : 'text-content-tertiary')}>{money(cWallet)}</p></div>
                   </div>
                   {/* Actions */}
                   <div className="flex items-center gap-1 shrink-0">
@@ -276,12 +279,12 @@ export default function Customers() {
                 </div>
                 {/* Expanded details */}
                 {expandedRow === cust.id && (
-                  <div className="border-t border-border bg-[#f8faf9] px-4 py-3 grid grid-cols-2 lg:grid-cols-4 gap-3 text-[11px]">
+                  <div className="border-t border-border bg-pos-bar px-4 py-3 grid grid-cols-2 lg:grid-cols-4 gap-3 text-[11px]">
                     <div><span className="text-content-tertiary">Status:</span><p className="text-content font-medium">{cust.status || 'Active'}</p></div>
                     <div><span className="text-content-tertiary">Type:</span><p className="text-content font-medium">{cust.customerType || 'General'}</p></div>
-                    <div><span className="text-content-tertiary">Wallet Credit:</span><p className="text-success font-medium">{currSymbol}{cWallet.toLocaleString('en-IN')}</p></div>
-                    <div><span className="text-content-tertiary">Outstanding:</span><p className={cn('font-medium', cDues > 0 ? 'text-danger' : 'text-content')}>{currSymbol}{cDues.toLocaleString('en-IN')}</p></div>
-                    <div><span className="text-content-tertiary">Lifetime Spend:</span><p className="text-content font-medium">{currSymbol}{cSpent.toLocaleString('en-IN')}</p></div>
+                    <div><span className="text-content-tertiary">Wallet Credit:</span><p className="text-success font-medium">{money(cWallet)}</p></div>
+                    <div><span className="text-content-tertiary">Outstanding:</span><p className={cn('font-medium', cDues > 0 ? 'text-danger' : 'text-content')}>{money(cDues)}</p></div>
+                    <div><span className="text-content-tertiary">Lifetime Spend:</span><p className="text-content font-medium">{money(cSpent)}</p></div>
                     <div><span className="text-content-tertiary">POS Orders:</span><p className="text-content font-medium">{cOrders}</p></div>
                     <div><span className="text-content-tertiary">Last POS Order:</span><p className="text-content font-medium">{cust.lastPosOrderAt ? new Date(cust.lastPosOrderAt).toLocaleDateString('en-IN') : '—'}</p></div>
                     <div><span className="text-content-tertiary">Notes:</span><p className="text-content font-medium">{cust.notes || '—'}</p></div>
@@ -297,10 +300,10 @@ export default function Customers() {
       {showAddModal && (
         <div className="fixed inset-0 z-[999] flex items-center justify-center p-4" onClick={(e) => { if (e.target === e.currentTarget) { setShowAddModal(false); setEditingCustomer(null); } }}>
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-          <div className="relative w-full max-w-lg bg-white rounded-xl shadow-2xl border border-[#dee2e6] overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-[#dee2e6] bg-[#f8faf9]">
-              <h3 className="text-[14px] font-bold text-[#111814]">{editingCustomer ? 'Edit Customer' : 'Add New Customer'}</h3>
-              <button onClick={() => { setShowAddModal(false); setEditingCustomer(null); }} className="p-1 rounded text-[#94a399] hover:text-[#111814] hover:bg-[#e2e8e4]"><X className="h-4 w-4" /></button>
+          <div className="relative w-full max-w-lg bg-white rounded-xl shadow-2xl border border-pos-card-border overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-pos-card-border bg-pos-bar">
+              <h3 className="text-[14px] font-bold text-pos-ink">{editingCustomer ? 'Edit Customer' : 'Add New Customer'}</h3>
+              <button onClick={() => { setShowAddModal(false); setEditingCustomer(null); }} className="p-1 rounded text-pos-muted hover:text-pos-ink hover:bg-pos-card-border"><X className="h-4 w-4" /></button>
             </div>
             <div className="p-5 space-y-3">
               <div className="grid grid-cols-2 gap-3">
@@ -340,17 +343,17 @@ export default function Customers() {
       {inactiveConfirm && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" onClick={(e) => { if (e.target === e.currentTarget) setInactiveConfirm(null); }}>
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-          <div className="relative w-full max-w-[340px] bg-white rounded-xl shadow-2xl border border-[#dee2e6] p-6 text-center animate-slide-up">
+          <div className="relative w-full max-w-[340px] bg-white rounded-xl shadow-2xl border border-pos-card-border p-6 text-center animate-slide-up">
             <div className="h-12 w-12 mx-auto mb-3 rounded-full bg-amber-100 flex items-center justify-center">
               <AlertTriangle className="h-6 w-6 text-amber-600" />
             </div>
-            <h3 className="text-[14px] font-bold text-[#111814] mb-1">Deactivate Customer?</h3>
+            <h3 className="text-[14px] font-bold text-pos-ink mb-1">Deactivate Customer?</h3>
             <p className="text-[11px] text-content-secondary mb-4">
               This will set <span className="font-semibold">{inactiveConfirm.name}</span> to <span className="font-semibold text-amber-600">Inactive</span>.<br />
               Cashiers cannot permanently delete customers — but inactive customers won't appear in POS search results by default.
             </p>
             <div className="flex gap-2">
-              <button onClick={() => setInactiveConfirm(null)} className="flex-1 h-[34px] text-[11px] font-medium border border-[#dee2e6] text-[#47554d] rounded-lg hover:bg-[#f1f5f2]">Cancel</button>
+              <button onClick={() => setInactiveConfirm(null)} className="flex-1 h-[34px] text-[11px] font-medium border border-pos-card-border text-pos-muted rounded-lg hover:bg-pos-ground">Cancel</button>
               <button onClick={handleDeactivate} disabled={saving} className="flex-1 h-[34px] text-[11px] font-semibold bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50">{saving ? '...' : 'Deactivate'}</button>
             </div>
           </div>

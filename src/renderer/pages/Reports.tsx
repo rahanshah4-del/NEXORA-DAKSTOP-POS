@@ -1,4 +1,5 @@
-import { useCurrencySymbol } from '@/hooks/useCurrency';
+import { useWorkspaceCurrencyValue } from '@/hooks/useWorkspaceCurrency';
+import { formatWorkspaceMoney, formatMoneyPrintable, getResolvedWorkspaceCurrency } from '@/utils/workspaceMoney';
 import { useAuthStore } from '@/stores/auth-store';
 import { useMenuStore } from '@/stores/menu-store';
 import { useSettingsStore } from '@/stores/settings-store';
@@ -111,10 +112,14 @@ function downloadCSV(filename: string, headers: string[], rows: string[][]): voi
 
 // Module-scope print helper (shared by every sub-report's Print button).
 function handlePrintReport(title: string, columns: [string, number][], rows: string[][], summary?: [string, string][], dateLabel?: string) {
+  // Outside a component — read the store snapshot rather than the hook.
+  const resolvedCurrency = getResolvedWorkspaceCurrency();
   const data = {
     title,
     subtitle: dateLabel,
-    currency: useSettingsStore.getState().currency,
+    // Resolved workspace currency, so printed reports match the screen.
+    currency: resolvedCurrency.currencyCode,
+    currencySymbol: resolvedCurrency.currencySymbol,
     columns,
     rows,
     summary,
@@ -141,15 +146,21 @@ const UnavailableReport: React.FC<{ title: string; reason: string }> = ({ title,
 
 // ── Sub-Reports ──
 
+/** Formats an amount as workspace currency, e.g. "Rs 12,500". */
+type MoneyFn = (amount: number) => string;
+
 interface ReportProps {
   orders: FirestoreOrder[];
-  currSymbol: string;
+  /** Screen formatting, e.g. "Rs 12,500" (may contain non-ASCII glyphs). */
+  money: MoneyFn;
+  /** Receipt formatting — guaranteed ASCII, e.g. "INR 12,500". */
+  printMoney: MoneyFn;
   dateLabel: string;
 }
 
 // ---- Sales Report ----
 
-function SalesReport({ orders, currSymbol, dateLabel }: ReportProps) {
+function SalesReport({ orders, money, printMoney, dateLabel }: ReportProps) {
   const paid = useMemo(() => orders.filter((o) => o.paymentStatus === 'paid' && o.orderStatus !== 'cancelled'), [orders]);
   const revenue = paid.reduce((s, o) => s + o.total, 0);
   const walletRevenue = paid.reduce((s, o) => s + (o.walletAmountUsed || 0), 0);
@@ -189,10 +200,10 @@ function SalesReport({ orders, currSymbol, dateLabel }: ReportProps) {
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatsCard title="Gross Revenue" value={`${currSymbol}${revenue.toLocaleString('en-IN')}`} icon={IndianRupee} iconColor="text-success" />
+        <StatsCard title="Gross Revenue" value={`${money(revenue)}`} icon={IndianRupee} iconColor="text-success" />
         <StatsCard title="Total Orders" value={totalOrd} icon={ShoppingCart} iconColor="text-primary" />
-        <StatsCard title="Wallet Revenue" value={walletRevenue > 0 ? `${currSymbol}${walletRevenue.toLocaleString('en-IN')}` : '—'} icon={Wallet} iconColor="text-[#0f7b47]" subtitle={walletOrderCount > 0 ? `${walletOrderCount} wallet order${walletOrderCount !== 1 ? 's' : ''}` : undefined} />
-        <StatsCard title="Avg. Order Value" value={avgOrd > 0 ? `${currSymbol}${avgOrd.toLocaleString('en-IN')}` : '—'} icon={TrendingUp} iconColor="text-info" />
+        <StatsCard title="Wallet Revenue" value={walletRevenue > 0 ? `${money(walletRevenue)}` : '—'} icon={Wallet} iconColor="text-pos-primary" subtitle={walletOrderCount > 0 ? `${walletOrderCount} wallet order${walletOrderCount !== 1 ? 's' : ''}` : undefined} />
+        <StatsCard title="Avg. Order Value" value={avgOrd > 0 ? `${money(avgOrd)}` : '—'} icon={TrendingUp} iconColor="text-info" />
       </div>
       <Card>
         <CardHeader>
@@ -201,8 +212,8 @@ function SalesReport({ orders, currSymbol, dateLabel }: ReportProps) {
             <Button variant="secondary" size="sm" leftIcon={<Printer className="h-3.5 w-3.5" />} onClick={() => {
               handlePrintReport('Sales Report',
                 [['Date', 30], ['Orders', 12], ['Revenue', 28], ['Tax', 30]],
-                daily.map((r) => [r.date, String(r.orders), `${currSymbol}${r.revenue}`, `${currSymbol}${r.total - r.revenue}`]),
-                [[`Total: ${daily.length} days`, `${currSymbol}${revenue.toLocaleString('en-IN')}`]],
+                daily.map((r) => [r.date, String(r.orders), `${printMoney(r.revenue)}`, `${printMoney(r.total - r.revenue)}`]),
+                [[`Total: ${daily.length} days`, `${printMoney(revenue)}`]],
               );
             }}>Print</Button>
             <Button variant="secondary" size="sm" leftIcon={<Download className="h-3.5 w-3.5" />} onClick={exportCsv} disabled={daily.length === 0}>Export CSV</Button>
@@ -215,10 +226,10 @@ function SalesReport({ orders, currSymbol, dateLabel }: ReportProps) {
             columns={[
               { key: 'date', header: 'Date', accessor: (r: typeof daily[0]) => <span className="text-xs font-medium">{fmtDate(r.date)}</span> },
               { key: 'orders', header: 'Orders', accessor: (r) => <span className="text-xs font-semibold">{r.orders}</span> },
-              { key: 'revenue', header: 'Revenue', accessor: (r) => <span className="text-xs font-semibold tabular-nums">{currSymbol}{r.revenue.toLocaleString('en-IN')}</span> },
-              { key: 'cgst', header: 'CGST', accessor: (r) => <span className="text-xs tabular-nums">{currSymbol}{r.cgst}</span> },
-              { key: 'sgst', header: 'SGST', accessor: (r) => <span className="text-xs tabular-nums">{currSymbol}{r.sgst}</span> },
-              { key: 'total', header: 'Total', accessor: (r) => <span className="text-xs font-semibold tabular-nums">{currSymbol}{r.total.toLocaleString('en-IN')}</span> },
+              { key: 'revenue', header: 'Revenue', accessor: (r) => <span className="text-xs font-semibold tabular-nums">{money(r.revenue)}</span> },
+              { key: 'cgst', header: 'CGST', accessor: (r) => <span className="text-xs tabular-nums">{money(r.cgst)}</span> },
+              { key: 'sgst', header: 'SGST', accessor: (r) => <span className="text-xs tabular-nums">{money(r.sgst)}</span> },
+              { key: 'total', header: 'Total', accessor: (r) => <span className="text-xs font-semibold tabular-nums">{money(r.total)}</span> },
             ]}
             data={daily}
             keyExtractor={(r) => r.date}
@@ -232,7 +243,7 @@ function SalesReport({ orders, currSymbol, dateLabel }: ReportProps) {
 
 // ---- Today's Report ----
 
-function TodaysReport({ orders, currSymbol }: ReportProps) {
+function TodaysReport({ orders, money, printMoney }: ReportProps) {
   const paid = orders.filter((o) => o.paymentStatus === 'paid');
   const revenue = paid.reduce((s, o) => s + o.total, 0);
   const dineIn = orders.filter((o) => o.orderType === 'Dine-in').length;
@@ -259,10 +270,10 @@ function TodaysReport({ orders, currSymbol }: ReportProps) {
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatsCard title="Today's Revenue" value={`${currSymbol}${revenue.toLocaleString('en-IN')}`} icon={IndianRupee} iconColor="text-success" />
+        <StatsCard title="Today's Revenue" value={`${money(revenue)}`} icon={IndianRupee} iconColor="text-success" />
         <StatsCard title="Total Orders" value={orders.length} icon={ShoppingCart} iconColor="text-primary" />
         <StatsCard title="Dine-in / T.Away / Del." value={`${dineIn} / ${takeaway} / ${delivery}`} icon={Users} iconColor="text-info" />
-        <StatsCard title="Avg. Order" value={avg > 0 ? `${currSymbol}${avg.toLocaleString('en-IN')}` : '—'} icon={TrendingUp} iconColor="text-primary" />
+        <StatsCard title="Avg. Order" value={avg > 0 ? `${money(avg)}` : '—'} icon={TrendingUp} iconColor="text-primary" />
       </div>
 
       {/* Payment Method Breakdown */}
@@ -274,25 +285,25 @@ function TodaysReport({ orders, currSymbol }: ReportProps) {
           <div className="grid grid-cols-4 gap-4 px-1">
             <div className="text-center p-2">
               <div className="flex items-center justify-center gap-1 mb-1">
-                <CreditCard className="h-4 w-4 text-[#47554d]" />
+                <CreditCard className="h-4 w-4 text-pos-muted" />
               </div>
               <p className="text-[10px] text-content-tertiary">Cash / Card</p>
-              <p className="text-sm font-bold text-content">{currSymbol}{cashCardRevenue.toLocaleString('en-IN')}</p>
+              <p className="text-sm font-bold text-content">{money(cashCardRevenue)}</p>
             </div>
             <div className="text-center p-2">
               <div className="flex items-center justify-center gap-1 mb-1">
-                <Wallet className="h-4 w-4 text-[#0f7b47]" />
+                <Wallet className="h-4 w-4 text-pos-primary" />
               </div>
               <p className="text-[10px] text-content-tertiary">Wallet</p>
-              <p className="text-sm font-bold text-[#0f7b47]">{currSymbol}{walletRevenue.toLocaleString('en-IN')}</p>
+              <p className="text-sm font-bold text-pos-primary">{money(walletRevenue)}</p>
             </div>
             <div className="text-center p-2">
               <p className="text-[10px] text-content-tertiary">Total Revenue</p>
-              <p className="text-sm font-bold text-content">{currSymbol}{revenue.toLocaleString('en-IN')}</p>
+              <p className="text-sm font-bold text-content">{money(revenue)}</p>
             </div>
             <div className="text-center p-2">
               <p className="text-[10px] text-content-tertiary">Wallet Orders</p>
-              <p className="text-sm font-bold text-[#0f7b47]">{paid.filter((o) => (o.walletAmountUsed || 0) > 0).length}</p>
+              <p className="text-sm font-bold text-pos-primary">{paid.filter((o) => (o.walletAmountUsed || 0) > 0).length}</p>
             </div>
           </div>
         </Card>
@@ -304,8 +315,8 @@ function TodaysReport({ orders, currSymbol }: ReportProps) {
           <Button variant="secondary" size="sm" leftIcon={<Printer className="h-3.5 w-3.5" />} onClick={() => {
             handlePrintReport('Todays Report',
               [['Order #', 18], ['Time', 14], ['Type', 14], ['Items', 8], ['Amount', 20], ['Wallet', 14], ['Status', 12]],
-              rows.map((r: any) => [r.orderNumber, r.time, r.type, String(r.items), `${currSymbol}${r.amount.toLocaleString('en-IN')}`, r.walletAmountUsed > 0 ? `${currSymbol}${r.walletAmountUsed}` : '—', r.status]),
-              [['Total Revenue', `${currSymbol}${revenue.toLocaleString('en-IN')}`], ['Wallet Revenue', `${currSymbol}${walletRevenue.toLocaleString('en-IN')}`]],
+              rows.map((r: any) => [r.orderNumber, r.time, r.type, String(r.items), `${printMoney(r.amount)}`, r.walletAmountUsed > 0 ? `${printMoney(r.walletAmountUsed)}` : '—', r.status]),
+              [['Total Revenue', `${printMoney(revenue)}`], ['Wallet Revenue', `${printMoney(walletRevenue)}`]],
             );
           }}>Print</Button>
         </CardHeader>
@@ -319,13 +330,13 @@ function TodaysReport({ orders, currSymbol }: ReportProps) {
               { key: 'table', header: 'Table', accessor: (r) => <span className="text-xs">{r.table}</span> },
               { key: 'type', header: 'Type', accessor: (r) => <Badge size="sm">{r.type}</Badge> },
               { key: 'items', header: 'Items', accessor: (r) => <span className="text-xs font-semibold">{r.items}</span> },
-              { key: 'amount', header: 'Amount', accessor: (r) => <span className="text-xs font-semibold tabular-nums">{currSymbol}{r.amount.toLocaleString('en-IN')}</span> },
+              { key: 'amount', header: 'Amount', accessor: (r) => <span className="text-xs font-semibold tabular-nums">{money(r.amount)}</span> },
               { key: 'status', header: 'Status', accessor: (r) => (
                 <Badge size="sm" variant={r.status === 'served' ? 'success' : r.status === 'cancelled' ? 'danger' : r.status === 'preparing' ? 'warning' : 'info'}>{r.status}</Badge>
               )},
               { key: 'wallet', header: 'Wallet', accessor: (r) => (
                 r.walletAmountUsed > 0
-                  ? <span className="inline-flex items-center gap-1 text-[9px] text-[#0f7b47] font-medium"><Wallet className="h-2.5 w-2.5" />{currSymbol}{r.walletAmountUsed.toLocaleString('en-IN')}</span>
+                  ? <span className="inline-flex items-center gap-1 text-[9px] text-pos-primary font-medium"><Wallet className="h-2.5 w-2.5" />{money(r.walletAmountUsed)}</span>
                   : <span className="text-[10px] text-content-tertiary">—</span>
               )},
             ]}
@@ -341,7 +352,7 @@ function TodaysReport({ orders, currSymbol }: ReportProps) {
 
 // ---- Items Report ----
 
-function ItemsReport({ orders, currSymbol }: ReportProps) {
+function ItemsReport({ orders, money, printMoney }: ReportProps) {
   const items = useMemo(() => {
     const map = new Map<string, { qty: number; revenue: number }>();
     for (const o of orders) {
@@ -367,8 +378,8 @@ function ItemsReport({ orders, currSymbol }: ReportProps) {
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-        <StatsCard title="Total Items Sold" value={totalSold.toLocaleString('en-IN')} icon={PackageIcon} iconColor="text-primary" />
-        <StatsCard title="Total Revenue" value={`${currSymbol}${totalRev.toLocaleString('en-IN')}`} icon={IndianRupee} iconColor="text-success" />
+        <StatsCard title="Total Items Sold" value={totalSold.toLocaleString('en-PK')} icon={PackageIcon} iconColor="text-primary" />
+        <StatsCard title="Total Revenue" value={`${money(totalRev)}`} icon={IndianRupee} iconColor="text-success" />
         <StatsCard title="Unique Items" value={items.length} icon={FileText} iconColor="text-info" />
       </div>
       <Card>
@@ -378,8 +389,8 @@ function ItemsReport({ orders, currSymbol }: ReportProps) {
             <Button variant="secondary" size="sm" leftIcon={<Printer className="h-3.5 w-3.5" />} onClick={() => {
               handlePrintReport('Items Report',
                 [['Item', 40], ['Qty Sold', 15], ['Revenue', 25], ['% of Total', 20]],
-                items.map((i: any) => [i.name, String(i.qty), `${currSymbol}${i.revenue.toLocaleString('en-IN')}`, i.percentage || '—']),
-                [['Total Sold', String(totalSold)], ['Total Revenue', `${currSymbol}${totalRev.toLocaleString('en-IN')}`]],
+                items.map((i: any) => [i.name, String(i.qty), `${printMoney(i.revenue)}`, i.percentage || '—']),
+                [['Total Sold', String(totalSold)], ['Total Revenue', `${printMoney(totalRev)}`]],
               );
             }}>Print</Button>
             <Button variant="secondary" size="sm" leftIcon={<Download className="h-3.5 w-3.5" />} onClick={exportCsv} disabled={items.length === 0}>Export CSV</Button>
@@ -392,8 +403,8 @@ function ItemsReport({ orders, currSymbol }: ReportProps) {
             columns={[
               { key: 'name', header: 'Item', accessor: (r: typeof items[0]) => <span className="text-xs font-medium">{r.name}</span> },
               { key: 'qty', header: 'Sold', accessor: (r) => <span className="text-xs font-semibold">{r.qty}</span> },
-              { key: 'price', header: 'Avg Price', accessor: (r) => <span className="text-xs tabular-nums">{currSymbol}{r.price}</span> },
-              { key: 'revenue', header: 'Revenue', accessor: (r) => <span className="text-xs font-semibold tabular-nums">{currSymbol}{r.revenue.toLocaleString('en-IN')}</span> },
+              { key: 'price', header: 'Avg Price', accessor: (r) => <span className="text-xs tabular-nums">{money(r.price)}</span> },
+              { key: 'revenue', header: 'Revenue', accessor: (r) => <span className="text-xs font-semibold tabular-nums">{money(r.revenue)}</span> },
             ]}
             data={items}
             keyExtractor={(r) => r.name}
@@ -407,7 +418,7 @@ function ItemsReport({ orders, currSymbol }: ReportProps) {
 
 // ---- Payment Report ----
 
-function PaymentReport({ orders, currSymbol }: ReportProps) {
+function PaymentReport({ orders, money, printMoney }: ReportProps) {
   const paymentRows = useMemo(() => {
     const map = new Map<string, { count: number; amount: number }>();
     for (const o of orders) {
@@ -428,8 +439,8 @@ function PaymentReport({ orders, currSymbol }: ReportProps) {
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatsCard title="Total Collections" value={`${currSymbol}${total.toLocaleString('en-IN')}`} icon={IndianRupee} iconColor="text-success" />
-        <StatsCard title="Total Transactions" value={totalTxns.toLocaleString('en-IN')} icon={CreditCard} iconColor="text-primary" />
+        <StatsCard title="Total Collections" value={`${money(total)}`} icon={IndianRupee} iconColor="text-success" />
+        <StatsCard title="Total Transactions" value={totalTxns.toLocaleString('en-PK')} icon={CreditCard} iconColor="text-primary" />
         <StatsCard title="Payment Methods" value={paymentRows.length} icon={FileText} iconColor="text-warning" />
         <StatsCard title="Top Method" value={paymentRows[0]?.method ?? '—'} icon={CreditCard} iconColor="text-info" />
       </div>
@@ -439,8 +450,8 @@ function PaymentReport({ orders, currSymbol }: ReportProps) {
           <Button variant="secondary" size="sm" leftIcon={<Printer className="h-3.5 w-3.5" />} onClick={() => {
             handlePrintReport('Payment Report',
               [['Method', 35], ['Orders', 15], ['Total', 25], ['Avg', 25]],
-              paymentRows.map((r: any) => [r.method, String(r.count), `${currSymbol}${r.amount.toLocaleString('en-IN')}`, `${currSymbol}${(r.count > 0 ? Math.round(r.amount / r.count) : 0).toLocaleString('en-IN')}`]),
-              [['Total Collections', `${currSymbol}${total.toLocaleString('en-IN')}`], ['Transactions', String(totalTxns)]],
+              paymentRows.map((r: any) => [r.method, String(r.count), `${printMoney(r.amount)}`, `${printMoney((r.count > 0 ? Math.round(r.amount / r.count) : 0))}`]),
+              [['Total Collections', `${printMoney(total)}`], ['Transactions', String(totalTxns)]],
             );
           }}>Print</Button>
         </CardHeader>
@@ -451,7 +462,7 @@ function PaymentReport({ orders, currSymbol }: ReportProps) {
             columns={[
               { key: 'method', header: 'Method', accessor: (r: typeof paymentRows[0]) => <span className="text-xs font-semibold">{r.method}</span> },
               { key: 'count', header: 'Transactions', accessor: (r) => <span className="text-xs">{r.count}</span> },
-              { key: 'amount', header: 'Amount', accessor: (r) => <span className="text-xs font-semibold tabular-nums">{currSymbol}{r.amount.toLocaleString('en-IN')}</span> },
+              { key: 'amount', header: 'Amount', accessor: (r) => <span className="text-xs font-semibold tabular-nums">{money(r.amount)}</span> },
               { key: 'percentage', header: 'Share', accessor: (r) => (
                 <div className="flex items-center gap-2">
                   <div className="w-16 h-1.5 bg-surface-tertiary rounded-full overflow-hidden">
@@ -473,7 +484,7 @@ function PaymentReport({ orders, currSymbol }: ReportProps) {
 
 // ---- Order Report ----
 
-function OrderReport({ orders, currSymbol }: ReportProps) {
+function OrderReport({ orders, money, printMoney }: ReportProps) {
   const completed = orders.filter((o) => o.orderStatus === 'served').length;
   const cancelled = orders.filter((o) => o.orderStatus === 'cancelled').length;
   const pending = orders.filter((o) => o.orderStatus === 'pending' || o.orderStatus === 'preparing').length;
@@ -506,8 +517,8 @@ function OrderReport({ orders, currSymbol }: ReportProps) {
           <Button variant="secondary" size="sm" leftIcon={<Printer className="h-3.5 w-3.5" />} onClick={() => {
             handlePrintReport('Order Report',
               [['Order #', 16], ['Type', 14], ['Status', 12], ['Customer', 22], ['Items', 8], ['Total', 16], ['Method', 12]],
-              rows.map((r: any) => [r.orderNumber, r.type, r.status, r.customer, String(r.items), `${currSymbol}${r.amount.toLocaleString('en-IN')}`, r.paymentMethod || '—']),
-              [['Total', `${currSymbol}${orders.reduce((s: number, o: any) => s + (o.total || 0), 0).toLocaleString('en-IN')}`], ['Served', String(completed)], ['Cancelled', String(cancelled)]],
+              rows.map((r: any) => [r.orderNumber, r.type, r.status, r.customer, String(r.items), `${printMoney(r.amount)}`, r.paymentMethod || '—']),
+              [['Total', `${printMoney(orders.reduce((s: number, o: any) => s + (o.total || 0), 0))}`], ['Served', String(completed)], ['Cancelled', String(cancelled)]],
             );
           }}>Print</Button>
         </CardHeader>
@@ -521,7 +532,7 @@ function OrderReport({ orders, currSymbol }: ReportProps) {
               { key: 'table', header: 'Table', accessor: (r) => <span className="text-xs">{r.table}</span> },
               { key: 'type', header: 'Type', accessor: (r) => <Badge size="sm">{r.type}</Badge> },
               { key: 'items', header: 'Items', accessor: (r) => <span className="text-xs font-semibold">{r.items}</span> },
-              { key: 'amount', header: 'Amount', accessor: (r) => <span className="text-xs font-semibold tabular-nums">{currSymbol}{r.amount.toLocaleString('en-IN')}</span> },
+              { key: 'amount', header: 'Amount', accessor: (r) => <span className="text-xs font-semibold tabular-nums">{money(r.amount)}</span> },
               { key: 'status', header: 'Status', accessor: (r) => <Badge size="sm" variant={r.status === 'served' ? 'success' : r.status === 'cancelled' ? 'danger' : 'info'}>{r.status}</Badge> },
               { key: 'payment', header: 'Payment', accessor: (r) => <span className="text-xs">{r.payment}</span> },
             ]}
@@ -537,7 +548,7 @@ function OrderReport({ orders, currSymbol }: ReportProps) {
 
 // ---- KOT Report ----
 
-function KOTReport({ orders, currSymbol }: ReportProps) {
+function KOTReport({ orders, money, printMoney }: ReportProps) {
   const rows = useMemo(() => orders.map((o) => ({
     kotNo: o.orderNumber,
     orderNo: o.orderNumber,
@@ -565,7 +576,7 @@ function KOTReport({ orders, currSymbol }: ReportProps) {
           <Button variant="secondary" size="sm" leftIcon={<Printer className="h-3.5 w-3.5" />} onClick={() => {
             handlePrintReport('KOT Report',
               [['Order #', 16], ['Time', 14], ['Type', 12], ['Table', 14], ['Items', 8], ['Total', 18], ['Status', 18]],
-              rows.map((r: any) => [r.kotNo, r.time, r.type, r.table, String(r.items), `${currSymbol}${r.amount.toLocaleString('en-IN')}`, r.status]),
+              rows.map((r: any) => [r.kotNo, r.time, r.type, r.table, String(r.items), `${printMoney(r.amount)}`, r.status]),
               [['Total KOTs', String(rows.length)], ['Pending', String(orders.filter((o: any) => o.orderStatus === 'pending').length)]],
             );
           }}>Print All</Button>
@@ -595,7 +606,7 @@ function KOTReport({ orders, currSymbol }: ReportProps) {
 
 // ---- Shift Report ----
 
-function ShiftReport({ orders, currSymbol }: ReportProps) {
+function ShiftReport({ orders, money, printMoney }: ReportProps) {
   const staffRows = useMemo(() => {
     const map = new Map<string, { orders: number; sales: number }>();
     for (const o of orders) {
@@ -616,7 +627,7 @@ function ShiftReport({ orders, currSymbol }: ReportProps) {
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
         <StatsCard title="Active Staff Today" value={activeStaff} icon={Users} iconColor="text-primary" />
         <StatsCard title="Total Orders Served" value={totalOrders} icon={ShoppingCart} iconColor="text-success" />
-        <StatsCard title="Total Sales" value={`${currSymbol}${staffRows.reduce((s, r) => s + r.sales, 0).toLocaleString('en-IN')}`} icon={IndianRupee} iconColor="text-warning" />
+        <StatsCard title="Total Sales" value={`${money(staffRows.reduce((s, r) => s + r.sales, 0))}`} icon={IndianRupee} iconColor="text-warning" />
       </div>
       <Card>
         <CardHeader>
@@ -624,7 +635,7 @@ function ShiftReport({ orders, currSymbol }: ReportProps) {
           <Button variant="secondary" size="sm" leftIcon={<Printer className="h-3.5 w-3.5" />} onClick={() => {
             handlePrintReport('Staff Report',
               [['Staff', 35], ['Orders', 15], ['Sales', 25], ['Shift', 25]],
-              staffRows.map((r: any) => [r.name, String(r.orders), `${currSymbol}${r.sales.toLocaleString('en-IN')}`, '—']),
+              staffRows.map((r: any) => [r.name, String(r.orders), `${printMoney(r.sales)}`, '—']),
               [['Active Staff', String(activeStaff)], ['Total Orders', String(totalOrders)]],
             );
           }}>Print</Button>
@@ -643,7 +654,7 @@ function ShiftReport({ orders, currSymbol }: ReportProps) {
                 </div>
               )},
               { key: 'orders', header: 'Orders', accessor: (r) => <span className="text-xs font-semibold">{r.orders}</span> },
-              { key: 'sales', header: 'Sales', accessor: (r) => <span className="text-xs font-semibold tabular-nums">{currSymbol}{r.sales.toLocaleString('en-IN')}</span> },
+              { key: 'sales', header: 'Sales', accessor: (r) => <span className="text-xs font-semibold tabular-nums">{money(r.sales)}</span> },
             ]}
             data={staffRows}
             keyExtractor={(r) => r.name}
@@ -657,7 +668,7 @@ function ShiftReport({ orders, currSymbol }: ReportProps) {
 
 // ---- Category Report (limited — cross-references menu store) ----
 
-function CategoryReport({ orders, currSymbol }: ReportProps) {
+function CategoryReport({ orders, money, printMoney }: ReportProps) {
   const menuItems = useMenuStore((s) => s.items);
   const itemCategoryMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -706,7 +717,7 @@ function CategoryReport({ orders, currSymbol }: ReportProps) {
                 <p className="text-xs text-content-secondary mt-0.5">{c.items} items &middot; {c.orderCount} orders</p>
               </div>
               <div className="text-right">
-                <p className="text-sm font-bold text-content tabular-nums">{currSymbol}{c.revenue.toLocaleString('en-IN')}</p>
+                <p className="text-sm font-bold text-content tabular-nums">{money(c.revenue)}</p>
                 <Badge size="sm" variant="primary">{c.percentage}</Badge>
               </div>
             </div>
@@ -719,7 +730,7 @@ function CategoryReport({ orders, currSymbol }: ReportProps) {
           <Button variant="secondary" size="sm" leftIcon={<Printer className="h-3.5 w-3.5" />} onClick={() => {
             handlePrintReport('Category Report',
               [['Category', 40], ['Orders', 15], ['Revenue', 25], ['% of Total', 20]],
-              categoryRows.map((r: any) => [r.category, String(r.orderCount), `${currSymbol}${r.revenue.toLocaleString('en-IN')}`, r.percentage || '—']),
+              categoryRows.map((r: any) => [r.category, String(r.orderCount), `${printMoney(r.revenue)}`, r.percentage || '—']),
               [['Total Categories', String(categoryRows.length)]],
             );
           }}>Print</Button>
@@ -732,7 +743,7 @@ function CategoryReport({ orders, currSymbol }: ReportProps) {
               { key: 'category', header: 'Category', accessor: (r: typeof categoryRows[0]) => <span className="text-xs font-semibold">{r.category}</span> },
               { key: 'items', header: 'Items', accessor: (r) => <span className="text-xs">{r.items}</span> },
               { key: 'orderCount', header: 'Orders', accessor: (r) => <span className="text-xs font-semibold">{r.orderCount}</span> },
-              { key: 'revenue', header: 'Revenue', accessor: (r) => <span className="text-xs font-semibold tabular-nums">{currSymbol}{r.revenue.toLocaleString('en-IN')}</span> },
+              { key: 'revenue', header: 'Revenue', accessor: (r) => <span className="text-xs font-semibold tabular-nums">{money(r.revenue)}</span> },
               { key: 'percentage', header: 'Share', accessor: (r) => <Badge size="sm">{r.percentage}</Badge> },
             ]}
             data={categoryRows}
@@ -763,7 +774,18 @@ const reportTypes = [
 // ── Main Component ──
 
 export default function Reports() {
-  const currSymbol = useCurrencySymbol();
+  // One hook call for the page; sub-reports receive the formatter as a prop.
+  const { currencyCode, currencySymbol: currencyOverride } = useWorkspaceCurrencyValue();
+  const money = useCallback(
+    (amount: number) => formatWorkspaceMoney(amount, currencyCode, currencyOverride),
+    [currencyCode, currencyOverride],
+  );
+  // Printed rows must be pure ASCII — the ESC/POS builder writes with
+  // Buffer.from(s, 'ascii') and silently corrupts anything else.
+  const printMoney = useCallback(
+    (amount: number) => formatMoneyPrintable(amount, currencyCode, currencyOverride),
+    [currencyCode, currencyOverride],
+  );
   const staffProfile = useAuthStore((s) => s.staffProfile);
   const wsId = staffProfile?.workspaceId;
 
@@ -831,7 +853,7 @@ export default function Reports() {
       return <ScreenErrorState error={error} onRetry={fetchOrders} />;
     }
 
-    const props: ReportProps = { orders, currSymbol, dateLabel };
+    const props: ReportProps = { orders, money, printMoney, dateLabel };
 
     switch (activeReport) {
       case 'sales': return <SalesReport {...props} />;

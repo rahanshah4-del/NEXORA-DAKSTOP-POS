@@ -7,10 +7,41 @@ import { Badge } from '@/components/ui/Badge';
 import { Tabs } from '@/components/ui/Tabs';
 import { useTheme } from '@/hooks/useTheme';
 import { useSettingsStore } from '@/stores/settings-store';
+import { useWorkspaceCurrencyValue } from '@/hooks/useWorkspaceCurrency';
+import { getWorkspaceSymbol } from '@/utils/workspaceMoney';
 import {
   RotateCw, Monitor, Sun, Moon, Download, Printer, FileText, X, Check, Bell,
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
+
+// ═══════════════════════
+// Workspace Currency (read-only)
+// ═══════════════════════
+
+/**
+ * Currency is owned by the workspace document and edited on the web dashboard,
+ * so the desktop shows it but never writes it. Kept as a disabled field rather
+ * than removed so the settings layout and the user's mental model stay intact.
+ */
+function WorkspaceCurrencyField() {
+  const { currencyCode, currencySymbol } = useWorkspaceCurrencyValue();
+  const symbol = getWorkspaceSymbol(currencyCode, currencySymbol);
+
+  return (
+    <div>
+      <Input
+        label="Currency"
+        value={`${currencyCode} — ${symbol}`}
+        readOnly
+        disabled
+        onChange={() => { /* read-only — managed on the web dashboard */ }}
+      />
+      <p className="mt-1 text-[10px] text-content-tertiary">
+        Currency is managed from the Nexora web dashboard (Settings).
+      </p>
+    </div>
+  );
+}
 
 // ═══════════════════════
 // Toast Notification System
@@ -58,16 +89,16 @@ function ToastContainer() {
           className={cn(
             'pointer-events-auto flex items-center gap-2 px-4 py-2.5 rounded-xl shadow-lg border text-[12px] font-medium',
             'animate-slide-up',
-            toast.type === 'success' && 'bg-[#e8f5e9] border-[#4CAF50]/30 text-[#2e7d32]',
-            toast.type === 'error' && 'bg-[#fce4ec] border-[#f44336]/30 text-[#c62828]',
-            toast.type === 'info' && 'bg-[#e3f2fd] border-[#2196F3]/30 text-[#1565C0]',
+            toast.type === 'success' && 'bg-pos-primary-soft border-pos-primary/30 text-pos-primary-dark',
+            toast.type === 'error' && 'bg-pos-cancel-bg border-pos-cancel-fg/30 text-pos-cancel-fg',
+            toast.type === 'info' && 'bg-pos-prep-bg border-pos-prep-fg/30 text-pos-prep-fg',
           )}
         >
           <span className={cn(
             'h-5 w-5 rounded-full flex items-center justify-center shrink-0',
-            toast.type === 'success' && 'bg-[#4CAF50] text-white',
-            toast.type === 'error' && 'bg-[#f44336] text-white',
-            toast.type === 'info' && 'bg-[#2196F3] text-white',
+            toast.type === 'success' && 'bg-pos-primary text-white',
+            toast.type === 'error' && 'bg-pos-cancel-fg text-white',
+            toast.type === 'info' && 'bg-pos-prep-fg text-white',
           )}>
             {toast.type === 'success' ? <Check className="h-3 w-3" /> : toast.type === 'error' ? <X className="h-3 w-3" /> : <Bell className="h-3 w-3" />}
           </span>
@@ -149,23 +180,7 @@ function GeneralTab() {
           <Input label="Phone" value={s.phone} onChange={(e) => s.update({ phone: e.target.value })} />
           <Input label="Email" value={s.email} onChange={(e) => s.update({ email: e.target.value })} />
           <div className="col-span-2"><Input label="Address" value={s.address} onChange={(e) => s.update({ address: e.target.value })} /></div>
-          <Select label="Default Currency" options={[
-            { value: 'INR', label: 'INR — Indian Rupee (₹)' },
-            { value: 'USD', label: 'USD — US Dollar ($)' },
-            { value: 'EUR', label: 'EUR — Euro (€)' },
-            { value: 'GBP', label: 'GBP — British Pound (£)' },
-            { value: 'AED', label: 'AED — UAE Dirham (د.إ)' },
-            { value: 'AUD', label: 'AUD — Australian Dollar (A$)' },
-            { value: 'CAD', label: 'CAD — Canadian Dollar (C$)' },
-            { value: 'SGD', label: 'SGD — Singapore Dollar (S$)' },
-            { value: 'SAR', label: 'SAR — Saudi Riyal (﷼)' },
-            { value: 'JPY', label: 'JPY — Japanese Yen (¥)' },
-            { value: 'CNY', label: 'CNY — Chinese Yuan (¥)' },
-            { value: 'PKR', label: 'PKR — Pakistani Rupee (₨)' },
-            { value: 'BDT', label: 'BDT — Bangladeshi Taka (৳)' },
-            { value: 'LKR', label: 'LKR — Sri Lankan Rupee (රු)' },
-            { value: 'NPR', label: 'NPR — Nepalese Rupee (रू)' },
-          ]} value={s.currency} onChange={(e) => s.update({ currency: e.target.value })} />
+          <WorkspaceCurrencyField />
         </div>
       </SectionCard>
 
@@ -391,8 +406,7 @@ function SystemDetailsTab() {
     // Reject rewinding the counter below the highest already-issued order number
     // (rewinding would make future orders overwrite already-paid orders).
     try {
-      const rows = await window.api.db.query('SELECT MAX(order_number) AS max_order FROM orders');
-      const maxOrder = Number((rows?.[0] as any)?.max_order) || 0;
+      const maxOrder = await window.api.db.getMaxOrderNumber();
       if (n <= maxOrder) {
         showToast(`Cannot set counter to ${n} — highest issued order is D-${maxOrder}`, 'error');
         return;

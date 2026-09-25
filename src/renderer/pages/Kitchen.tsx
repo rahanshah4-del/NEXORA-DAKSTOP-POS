@@ -193,7 +193,7 @@ export default function Kitchen() {
         <div className="p-3">
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
             {[1, 2, 3, 4, 5, 6].map((i) => (
-              <div key={i} className="bg-white rounded-lg border border-[#e2e8e0] p-4 space-y-3 animate-pulse">
+              <div key={i} className="bg-white rounded-lg border border-pos-card-border p-4 space-y-3 animate-pulse">
                 <div className="flex justify-between">
                   <div className="h-4 w-24 bg-gray-200 rounded" />
                   <div className="h-3 w-12 bg-gray-100 rounded" />
@@ -227,7 +227,7 @@ export default function Kitchen() {
           )}
 
           {filteredOrders.length === 0 ? (
-            <div className="flex items-center justify-center h-64 text-[#94a399] text-sm">
+            <div className="flex items-center justify-center h-64 text-pos-muted text-sm">
               <div className="text-center">
                 <ChefHat className="h-10 w-10 mx-auto mb-3 opacity-20" />
                 <p className="font-medium">No active orders</p>
@@ -249,23 +249,23 @@ export default function Kitchen() {
                       isAdvancing && 'opacity-60 pointer-events-none',
                     )}
                   >
-                    <div className="flex items-center justify-between px-3 py-2.5 border-b border-[#e2e8e0]">
+                    <div className="flex items-center justify-between px-3 py-2.5 border-b border-pos-card-border">
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="text-[12px] font-bold text-[#111814]">{order.orderNumber}</span>
+                          <span className="text-[12px] font-bold text-pos-ink">{order.orderNumber}</span>
                           <span className={cn('text-[9px] font-semibold px-1.5 py-0.5 rounded-full', s.dot, s.dot === 'bg-amber-400' ? 'text-amber-900' : 'text-white')}>
                             {s.label}
                           </span>
                         </div>
-                        <p className="text-[10px] text-[#47554d] mt-0.5">
+                        <p className="text-[10px] text-pos-muted mt-0.5">
                           {order.table || order.orderType} &middot; {order.staffName || 'Unknown'}
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className="text-[10px] text-[#94a399] flex items-center gap-1">
+                        <p className="text-[10px] text-pos-muted flex items-center gap-1">
                           <Timer className="h-3 w-3" />{elapsedMinutes(order.createdAt)}
                         </p>
-                        <p className="text-[9px] text-[#94a399]">{fmtTime(order.createdAt)}</p>
+                        <p className="text-[9px] text-pos-muted">{fmtTime(order.createdAt)}</p>
                       </div>
                     </div>
 
@@ -273,7 +273,7 @@ export default function Kitchen() {
                       {(order.cartRows ?? []).map((item, idx) => (
                         <div key={idx} className="flex items-center gap-2 text-[11px]">
                           <span className="flex-1">{item.itemName}</span>
-                          <span className="font-semibold text-[#47554d] shrink-0">×{item.qty}</span>
+                          <span className="font-semibold text-pos-muted shrink-0">×{item.qty}</span>
                           {item.note && (
                             <span className="text-[9px] text-amber-600 bg-amber-50 px-1 rounded shrink-0 max-w-[80px] truncate">{item.note}</span>
                           )}
@@ -281,11 +281,11 @@ export default function Kitchen() {
                       ))}
                     </div>
 
-                    <div className="flex items-center gap-1.5 px-3 py-2 border-t border-[#e2e8e0] bg-[#f8faf9]">
+                    <div className="flex items-center gap-1.5 px-3 py-2 border-t border-pos-card-border bg-pos-bar">
                       <button
                         onClick={(e) => { e.stopPropagation(); advanceStatus(order.orderNumber); }}
                         disabled={isAdvancing}
-                        className="flex-1 h-7 text-[10px] font-semibold bg-[#0f7b47] hover:bg-[#056638] text-white rounded transition-colors disabled:opacity-50"
+                        className="flex-1 h-7 text-[10px] font-semibold bg-pos-primary hover:bg-pos-primary-dark text-white rounded transition-colors disabled:opacity-50"
                       >
                         {isAdvancing ? '...' : ADVANCE_LABEL[order.orderStatus] || 'Next'}
                       </button>
@@ -302,8 +302,8 @@ export default function Kitchen() {
           const s = statusBadge(selectedOrder.orderStatus);
           const itemCount = (selectedOrder.cartRows ?? []).reduce((sum, i) => sum + i.qty, 0);
           return (
-            <div className="w-[340px] bg-white border-l border-[#dee2e6] flex flex-col shrink-0">
-              <div className="flex items-center justify-between px-3 h-[44px] bg-[#0f7b47]">
+            <div className="w-[340px] bg-white border-l border-pos-card-border flex flex-col shrink-0">
+              <div className="flex items-center justify-between px-3 h-[44px] bg-pos-primary">
                 <div>
                   <h3 className="text-[12px] font-bold text-white">{selectedOrder.orderNumber}</h3>
                   <p className="text-[9px] text-white/70">{selectedOrder.table || selectedOrder.orderType} &middot; {selectedOrder.staffName}</p>
@@ -311,7 +311,7 @@ export default function Kitchen() {
                 <button onClick={() => setSelectedOrder(null)} className="p-1 text-white/70 hover:text-white"><X className="h-4 w-4" /></button>
               </div>
               <div className="flex-1 overflow-auto p-3 space-y-3">
-                <div className="bg-[#f8faf9] rounded-lg p-2.5 space-y-1 text-[10px]">
+                <div className="bg-pos-bar rounded-lg p-2.5 space-y-1 text-[10px]">
                   {[
                     { l: 'Status', v: s.label },
                     { l: 'Order Type', v: selectedOrder.orderType },
@@ -320,14 +320,14 @@ export default function Kitchen() {
                     { l: 'Elapsed', v: elapsedMinutes(selectedOrder.createdAt) },
                     { l: 'Items', v: String(itemCount) },
                   ].map((r, i) => (
-                    <div key={i} className="flex justify-between"><span className="text-[#94a399]">{r.l}</span><span className="font-semibold">{r.v}</span></div>
+                    <div key={i} className="flex justify-between"><span className="text-pos-muted">{r.l}</span><span className="font-semibold">{r.v}</span></div>
                   ))}
                 </div>
                 <div>
-                  <h4 className="text-[10px] font-semibold text-[#47554d] uppercase mb-2">Line Items</h4>
+                  <h4 className="text-[10px] font-semibold text-pos-muted uppercase mb-2">Line Items</h4>
                   <div className="space-y-1">
                     {(selectedOrder.cartRows ?? []).map((item, idx) => (
-                      <div key={idx} className="flex items-center gap-2 p-2 bg-[#f8faf9] rounded text-[11px]">
+                      <div key={idx} className="flex items-center gap-2 p-2 bg-pos-bar rounded text-[11px]">
                         <span className="flex-1">{item.itemName}</span>
                         {item.note && <span className="text-[9px] text-amber-600 bg-amber-50 px-1 rounded">({item.note})</span>}
                         <span className="font-semibold">×{item.qty}</span>
@@ -336,16 +336,16 @@ export default function Kitchen() {
                   </div>
                 </div>
               </div>
-              <div className="p-3 border-t border-[#dee2e6] space-y-1.5">
+              <div className="p-3 border-t border-pos-card-border space-y-1.5">
                 {STATUS_FLOW[selectedOrder.orderStatus] && (
                   <button
                     onClick={() => advanceStatus(selectedOrder.orderNumber)}
-                    className="w-full h-9 text-[11px] font-bold bg-[#0f7b47] hover:bg-[#056638] text-white rounded transition-colors"
+                    className="w-full h-9 text-[11px] font-bold bg-pos-primary hover:bg-pos-primary-dark text-white rounded transition-colors"
                   >
                     {ADVANCE_LABEL[selectedOrder.orderStatus]}
                   </button>
                 )}
-                <button onClick={() => setSelectedOrder(null)} className="w-full h-8 text-[10px] font-medium border border-[#dee2e6] text-[#47554d] rounded hover:bg-[#f8faf9] transition-colors">
+                <button onClick={() => setSelectedOrder(null)} className="w-full h-8 text-[10px] font-medium border border-pos-card-border text-pos-muted rounded hover:bg-pos-bar transition-colors">
                   Close
                 </button>
               </div>
@@ -361,42 +361,42 @@ export default function Kitchen() {
   if (!kdsEnabled) return <Navigate to="/" replace />;
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#f1f3f2] select-none font-sans">
+    <div className="flex h-screen w-screen overflow-hidden bg-pos-ground select-none font-sans">
       <IconBar />
 
-      <div className="flex flex-1 flex-col min-w-0 ml-[56px]">
-        <header className="flex items-center h-[48px] px-4 bg-white border-b border-[#e2e8e4] shrink-0">
-          <h1 className="text-[14px] font-bold text-[#111814] tracking-tight">Nexora Solution</h1>
-          <span className="h-4 w-px bg-[#dee2e6] mx-2.5" />
-          <span className="text-[11px] text-[#94a399] font-medium">Kitchen Display</span>
+      <div className="flex flex-1 flex-col min-w-0 ml-rail">
+        <header className="flex items-center h-[48px] px-4 bg-pos-bar border-b border-pos-card-border shrink-0">
+          <h1 className="text-[14px] font-bold text-pos-ink tracking-tight">Nexora Solution</h1>
+          <span className="h-4 w-px bg-pos-card-border mx-2.5" />
+          <span className="text-[11px] text-pos-muted font-medium">Kitchen Display</span>
           <div className="flex-1 drag-region h-full" />
           <div className="flex items-center gap-3 no-drag">
-            <span className="text-[11px] text-[#47554d] flex items-center gap-1.5">
-              <Clock className="h-3.5 w-3.5 text-[#94a399]" />
+            <span className="text-[11px] text-pos-muted flex items-center gap-1.5">
+              <Clock className="h-3.5 w-3.5 text-pos-muted" />
               {currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
             </span>
-            <div className="flex items-center gap-1.5 text-[11px] text-[#47554d]">
-              <div className="h-6 w-6 rounded-full bg-[#cceddb] flex items-center justify-center"><User className="h-3 w-3 text-[#0f7b47]" /></div>
-              Admin <ChevronDown className="h-3 w-3 text-[#94a399]" />
+            <div className="flex items-center gap-1.5 text-[11px] text-pos-muted">
+              <div className="h-6 w-6 rounded-full bg-pos-primary-soft flex items-center justify-center"><User className="h-3 w-3 text-pos-primary" /></div>
+              Admin <ChevronDown className="h-3 w-3 text-pos-muted" />
             </div>
             <div className="flex items-center ml-1">
-              <button className="h-7 w-9 flex items-center justify-center text-[#94a399] hover:text-[#47554d] hover:bg-[#f1f5f2] rounded transition-colors">─</button>
-              <button className="h-7 w-9 flex items-center justify-center text-[#94a399] hover:text-[#47554d] hover:bg-[#f1f5f2] rounded transition-colors">□</button>
-              <button className="h-7 w-9 flex items-center justify-center text-[#94a399] hover:text-white hover:bg-[#da3849] rounded transition-colors"><X className="h-3.5 w-3.5" /></button>
+              <button className="h-7 w-9 flex items-center justify-center text-pos-muted hover:text-pos-muted hover:bg-pos-ground rounded transition-colors">─</button>
+              <button className="h-7 w-9 flex items-center justify-center text-pos-muted hover:text-pos-muted hover:bg-pos-ground rounded transition-colors">□</button>
+              <button className="h-7 w-9 flex items-center justify-center text-pos-muted hover:text-white hover:bg-pos-cancel-fg rounded transition-colors"><X className="h-3.5 w-3.5" /></button>
             </div>
           </div>
         </header>
 
         {/* Filter Bar */}
-        <div className="flex items-center h-[44px] px-3 bg-white border-b border-[#dee2e6] shrink-0 gap-2">
+        <div className="flex items-center h-[44px] px-3 bg-pos-bar border-b border-pos-card-border shrink-0 gap-2">
           {FILTERS.map((f) => {
             const c = f === 'All' ? counts.all : f === 'Pending' ? counts.pending : f === 'Preparing' ? counts.preparing : counts.ready;
             return (
               <button key={f} onClick={() => setActiveFilter(f)}
                 className={cn('px-3 py-1.5 text-[10px] font-semibold rounded transition-colors flex items-center gap-1.5',
-                  activeFilter === f ? 'bg-[#0f7b47] text-white' : 'text-[#47554d] hover:text-[#111814] hover:bg-[#f1f5f2]')}>
+                  activeFilter === f ? 'bg-pos-primary text-white' : 'text-pos-muted hover:text-pos-ink hover:bg-pos-ground')}>
                 {f}
-                {c > 0 && <span className={cn('text-[9px] px-1.5 py-0.5 rounded-full', activeFilter === f ? 'bg-white/20' : 'bg-[#e2e8e0]')}>{c}</span>}
+                {c > 0 && <span className={cn('text-[9px] px-1.5 py-0.5 rounded-full', activeFilter === f ? 'bg-white/20' : 'bg-pos-card-border')}>{c}</span>}
               </button>
             );
           })}
@@ -404,12 +404,12 @@ export default function Kitchen() {
           <button
             onClick={fetchOrders}
             disabled={isLoading}
-            className="flex items-center gap-1 px-2 py-1 text-[10px] text-[#47554d] hover:text-[#111814] hover:bg-[#f1f5f2] rounded transition-colors disabled:opacity-50"
+            className="flex items-center gap-1 px-2 py-1 text-[10px] text-pos-muted hover:text-pos-ink hover:bg-pos-ground rounded transition-colors disabled:opacity-50"
           >
             <RotateCw className={cn('h-3 w-3', isLoading && 'animate-spin')} />Refresh
           </button>
           <button
-            className="flex items-center gap-1 px-2 py-1 text-[10px] text-[#47554d] rounded transition-colors hover:bg-[#f0f9f4] hover:text-[#0f7b47]"
+            className="flex items-center gap-1 px-2 py-1 text-[10px] text-pos-muted rounded transition-colors hover:bg-pos-primary-soft hover:text-pos-primary"
             title="Print all active kitchen orders"
             onClick={() => {
               if (filteredOrders.length === 0) { notifyError('No active orders to print'); return; }
@@ -434,7 +434,7 @@ export default function Kitchen() {
 
         {renderContent()}
 
-        <footer className="flex items-center justify-between h-[32px] px-3 bg-[#204937] shrink-0">
+        <footer className="flex items-center justify-between h-[32px] px-3 bg-pos-deep shrink-0">
           <div className="flex items-center gap-1 text-[9px] text-white/70">
             <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-amber-400" />Pending: <span className="text-white font-semibold">{counts.pending}</span></span>
             <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-blue-500" />Preparing: <span className="text-white font-semibold">{counts.preparing}</span></span>

@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useSettingsStore } from '@/stores/settings-store';
-import nexoraLogo from '@/assets/icons/nexora-logo-28.png';
+import nexoraLogo from '@/assets/icons/nexora-logo.png';
 
 const allNavItems = [
   { id: 'home', label: 'Home', icon: Home, path: '/' },
@@ -51,19 +51,18 @@ export function IconBar() {
   };
 
   return (
-    <aside className="fixed left-0 top-0 bottom-0 z-50 w-[56px] bg-white border-r border-[#e2e8e4] flex flex-col shrink-0">
-      {/* Logo */}
+    <aside className="fixed left-0 top-0 bottom-0 z-50 flex w-rail shrink-0 flex-col items-center bg-pos-rail">
+      {/* Logo — 40px tile, full-resolution asset */}
       <button
         onClick={() => navigate('/')}
-        className="h-[48px] flex items-center justify-center border-b border-[#e2e8e4] hover:bg-[#f0f9f4] transition-colors shrink-0"
+        aria-label="Go to dashboard"
+        className="mt-2.5 mb-1 flex h-[40px] w-[40px] shrink-0 items-center justify-center rounded-[10px] transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-pos-lime focus-visible:ring-offset-2 focus-visible:ring-offset-pos-rail"
       >
-        <div className="h-7 w-7 rounded-md bg-white flex items-center justify-center overflow-hidden">
-          <img src={nexoraLogo} alt="Nexora Solution" className="h-7 w-7 object-contain" />
-        </div>
+        <img src={nexoraLogo} alt="Nexora" className="h-[40px] w-[40px] rounded-[10px] object-contain" />
       </button>
 
       {/* Navigation */}
-      <nav className="flex-1 flex flex-col items-center py-1.5 gap-0.5 overflow-y-auto">
+      <nav className="flex flex-1 flex-col items-center justify-start gap-1 overflow-y-auto pt-1">
         {navItems.map((item) => {
           const isActive =
             location.pathname === item.path ||
@@ -73,37 +72,32 @@ export function IconBar() {
             <button
               key={item.id}
               onClick={() => navigate(item.path)}
+              aria-current={isActive ? 'page' : undefined}
               className={cn(
-                'relative flex flex-col items-center justify-center gap-0.5 w-[44px] h-[46px] rounded-lg transition-all duration-150',
+                'flex h-[46px] w-[64px] flex-col items-center justify-center gap-0.5 rounded-[10px] px-0.5 transition-colors',
+                'focus:outline-none focus-visible:ring-2 focus-visible:ring-pos-lime focus-visible:ring-offset-2 focus-visible:ring-offset-pos-rail',
                 isActive
-                  ? 'text-[#187a49] bg-[#cdeddc]'
-                  : 'text-[#416455] hover:text-[#187a49] hover:bg-[#f0f9f4]',
+                  ? 'bg-pos-lime/[0.14] text-pos-lime'
+                  : 'text-pos-rail-icon hover:bg-white/5 hover:text-white',
               )}
             >
-              <item.icon className="h-[18px] w-[18px]" strokeWidth={isActive ? 2.2 : 1.6} />
-              <span className="text-[8px] font-semibold leading-none tracking-tight">{item.label}</span>
-              {isActive && (
-                <span className="absolute left-0 top-[10px] bottom-[10px] w-[3px] bg-[#187a49] rounded-r-full" />
-              )}
+              <item.icon className="h-[18px] w-[18px] shrink-0" strokeWidth={isActive ? 2.2 : 1.7} />
+              <span className="w-full truncate whitespace-nowrap text-center text-[10px] font-medium leading-tight" title={item.label}>{item.label}</span>
             </button>
           );
         })}
       </nav>
 
-      {/* Footer */}
-      <div className="pb-1.5 flex flex-col items-center border-t border-[#e2e8e4] pt-1 shrink-0">
-        <button
-          onClick={handleLogout}
-          disabled={isLoggingOut}
-          className="flex flex-col items-center justify-center gap-0.5 w-[44px] h-[46px] rounded-lg text-[#416455] hover:text-red-600 hover:bg-red-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-          title="Sign out"
-        >
-          <LogOut className="h-[18px] w-[18px]" strokeWidth={1.6} />
-          <span className="text-[8px] font-semibold">
-            {isLoggingOut ? '...' : 'Exit'}
-          </span>
-        </button>
-      </div>
+      {/* Logout */}
+      <button
+        onClick={handleLogout}
+        disabled={isLoggingOut}
+        aria-label="Log out"
+        title="Log out"
+        className="mb-2.5 mt-1.5 flex h-[40px] w-[40px] shrink-0 items-center justify-center rounded-[10px] border border-pos-deep-border text-pos-rail-icon transition-colors hover:border-pos-lime/50 hover:text-white disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-pos-lime focus-visible:ring-offset-2 focus-visible:ring-offset-pos-rail"
+      >
+        <LogOut className="h-4 w-4" strokeWidth={1.7} />
+      </button>
     </aside>
   );
 }

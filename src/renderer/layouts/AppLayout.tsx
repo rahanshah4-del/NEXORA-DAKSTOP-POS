@@ -6,10 +6,10 @@ import { ScrollArea } from '@/components/ui/ScrollArea';
 
 export function AppLayout() {
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-white">
+    <div className="flex h-screen w-screen overflow-hidden bg-pos-ground">
       <IconBar />
 
-      <div className="flex flex-1 flex-col min-w-0 ml-[56px]">
+      <div className="flex flex-1 flex-col min-w-0 ml-rail">
         <Header />
 
         <main className="flex-1 overflow-hidden relative">

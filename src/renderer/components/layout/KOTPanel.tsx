@@ -1,6 +1,6 @@
-import { useCurrencySymbol } from '@/hooks/useCurrency';
+import { useWorkspaceCurrencyValue } from '@/hooks/useWorkspaceCurrency';
+import { formatWorkspaceMoney, getWorkspaceSymbol } from '@/utils/workspaceMoney';
 import { useSettingsStore } from '@/stores/settings-store';
-import { getCurrencySymbol } from '@/utils/formatters';
 import { cn } from '@/utils/cn';
 import { ScrollArea } from '@/components/ui/ScrollArea';
 import { Button } from '@/components/ui/Button';
@@ -52,7 +52,9 @@ export function KOTPanel({
   tableName = 'Table 5',
   items = sampleItems,
 }: KOTPanelProps) {
-  const currSymbol = useCurrencySymbol();
+  const { currencyCode, currencySymbol: currencyOverride } = useWorkspaceCurrencyValue();
+  const currSymbol = getWorkspaceSymbol(currencyCode, currencyOverride);
+  const money = (amount: number) => formatWorkspaceMoney(amount, currencyCode, currencyOverride);
   const subtotal = items.reduce((sum, i) => sum + i.qty * i.price, 0);
   const cgst = Math.round(subtotal * 0.025);
   const sgst = Math.round(subtotal * 0.025);
@@ -148,7 +150,7 @@ export function KOTPanel({
 
               {/* Price & delete */}
               <div className="flex items-center gap-2 shrink-0">
-                <span className="text-[13px] font-semibold tabular-nums">{currSymbol}{item.qty * item.price}</span>
+                <span className="text-[13px] font-semibold tabular-nums">{money(item.qty * item.price)}</span>
                 <button className="opacity-0 group-hover:opacity-100 text-content-tertiary hover:text-danger transition-all">
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
@@ -171,15 +173,15 @@ export function KOTPanel({
         <div className="px-4 py-3 space-y-1.5">
           <div className="flex justify-between text-[12px]">
             <span className="text-content-secondary">Subtotal</span>
-            <span className="font-medium tabular-nums">{currSymbol}{subtotal}</span>
+            <span className="font-medium tabular-nums">{money(subtotal)}</span>
           </div>
           <div className="flex justify-between text-[12px]">
             <span className="text-content-secondary">CGST (2.5%)</span>
-            <span className="font-medium tabular-nums">{currSymbol}{cgst}</span>
+            <span className="font-medium tabular-nums">{money(cgst)}</span>
           </div>
           <div className="flex justify-between text-[12px]">
             <span className="text-content-secondary">SGST (2.5%)</span>
-            <span className="font-medium tabular-nums">{currSymbol}{sgst}</span>
+            <span className="font-medium tabular-nums">{money(sgst)}</span>
           </div>
 
           {/* Discount */}
@@ -196,7 +198,7 @@ export function KOTPanel({
 
           <div className="flex justify-between text-[15px] font-bold pt-0.5">
             <span>Total</span>
-            <span className="tabular-nums">{currSymbol}{total}</span>
+            <span className="tabular-nums">{money(total)}</span>
           </div>
         </div>
 
@@ -220,7 +222,7 @@ export function KOTPanel({
             </Button>
           </div>
           <Button className="w-full h-10 text-[13px] font-bold" size="lg">
-            Place Order • {currSymbol}{total}
+            Place Order • {money(total)}
           </Button>
         </div>
       </div>
