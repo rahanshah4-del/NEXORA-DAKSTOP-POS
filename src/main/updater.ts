@@ -7,7 +7,24 @@ const log = {
   error: (...args: unknown[]) => console.error('[Updater]', ...args),
 };
 
+/**
+ * TODO(part-2): re-enable once a real update feed exists.
+ *
+ * electron-builder.yml publishes to https://nexorasolution.online/releases,
+ * which currently returns 404 for latest.yml. Leaving this armed means every
+ * packaged launch fires a failing check 5s in and again every 4h. The wiring
+ * below is intentionally kept intact — flip this flag (and ship a signed build
+ * with a reachable feed) to turn it back on.
+ */
+const AUTO_UPDATER_ENABLED = false;
+
 export function setupAutoUpdater(mainWindow: BrowserWindow): void {
+  if (!AUTO_UPDATER_ENABLED) {
+    autoUpdater.logger = log;
+    autoUpdater.logger?.info('Auto-updater disabled (no release feed configured yet)');
+    return;
+  }
+
   if (!app.isPackaged) {
     autoUpdater.logger = log;
     autoUpdater.logger?.info('Auto-updater disabled in development');

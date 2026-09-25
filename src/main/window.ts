@@ -100,7 +100,9 @@ export function persistWindowState(win: BrowserWindow): void {
  *    every other scheme (file:, javascript:, custom protocols) is dropped.
  */
 function applyNavigationGuards(win: BrowserWindow): void {
-  const isDev = process.env.NODE_ENV === 'development' || !!process.env.ELECTRON_RENDERER_URL;
+  // app.isPackaged, never env vars: a packaged build must always treat itself
+  // as production regardless of what NODE_ENV happens to be set to.
+  const isDev = !app.isPackaged;
   const devOrigin = (() => {
     try { return new URL(process.env.ELECTRON_RENDERER_URL || 'http://localhost:5173').origin; }
     catch { return 'http://localhost:5173'; }
@@ -156,6 +158,9 @@ export function createMainWindow(): BrowserWindow {
       nodeIntegration: false,
       sandbox: false,
       webSecurity: true,
+      // No DevTools on a till. Also disables the Ctrl+Shift+I accelerator,
+      // which stays live even though frame:false hides the menu bar.
+      devTools: !app.isPackaged,
     },
   });
 
@@ -193,7 +198,8 @@ export function createMainWindow(): BrowserWindow {
     win.webContents.send('window:maximizeChange', win.isMaximized());
   });
 
-  const isDev = process.env.NODE_ENV === 'development' || !!process.env.ELECTRON_RENDERER_URL;
+  // Packaged => always loadFile. Never loadURL, never a dev-server fallback.
+  const isDev = !app.isPackaged;
 
   if (isDev) {
     const devUrl = process.env.ELECTRON_RENDERER_URL || 'http://localhost:5173';

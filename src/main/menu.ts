@@ -50,17 +50,24 @@ export function buildAppMenu(mainWindow: BrowserWindow): Menu {
     },
     {
       label: 'View',
+      // reload / forceReload / toggleDevTools are dev-only. Their accelerators
+      // (Ctrl+R, Ctrl+Shift+I) fire even with the menu bar hidden by
+      // frame:false, so they must not be registered in a packaged build.
       submenu: [
-        { role: 'reload' },
-        { role: 'forceReload' },
-        { role: 'toggleDevTools' },
-        { type: 'separator' },
+        ...(app.isPackaged
+          ? []
+          : ([
+              { role: 'reload' },
+              { role: 'forceReload' },
+              { role: 'toggleDevTools' },
+              { type: 'separator' },
+            ] as MenuItemConstructorOptions[])),
         { role: 'resetZoom' },
         { role: 'zoomIn' },
         { role: 'zoomOut' },
         { type: 'separator' },
         { role: 'togglefullscreen' },
-      ],
+      ] as MenuItemConstructorOptions[],
     },
     {
       label: 'Window',

@@ -7,14 +7,30 @@ import { loadEnv } from 'vite';
 // depend on a runtime .env file (which is not shipped in the asar).
 const env = loadEnv('development', __dirname, '');
 
-const firebaseDefine = {
-  'process.env.FIREBASE_API_KEY': JSON.stringify(env.FIREBASE_API_KEY ?? ''),
-  'process.env.FIREBASE_AUTH_DOMAIN': JSON.stringify(env.FIREBASE_AUTH_DOMAIN ?? ''),
-  'process.env.FIREBASE_PROJECT_ID': JSON.stringify(env.FIREBASE_PROJECT_ID ?? ''),
-  'process.env.FIREBASE_STORAGE_BUCKET': JSON.stringify(env.FIREBASE_STORAGE_BUCKET ?? ''),
-  'process.env.FIREBASE_MESSAGING_SENDER_ID': JSON.stringify(env.FIREBASE_MESSAGING_SENDER_ID ?? ''),
-  'process.env.FIREBASE_APP_ID': JSON.stringify(env.FIREBASE_APP_ID ?? ''),
-};
+const FIREBASE_KEYS = [
+  'FIREBASE_API_KEY',
+  'FIREBASE_AUTH_DOMAIN',
+  'FIREBASE_PROJECT_ID',
+  'FIREBASE_STORAGE_BUCKET',
+  'FIREBASE_MESSAGING_SENDER_ID',
+  'FIREBASE_APP_ID',
+] as const;
+
+// Fail the build rather than shipping an app that installs fine and then
+// can't log in. These values are baked in, so a missing key is unrecoverable
+// at runtime and surfaces only as an opaque Firebase auth error.
+const missingFirebaseKeys = FIREBASE_KEYS.filter((key) => !env[key]?.trim());
+if (missingFirebaseKeys.length > 0) {
+  throw new Error(
+    `Firebase config incomplete — cannot build.\n` +
+      `Missing or empty in .env: ${missingFirebaseKeys.join(', ')}\n` +
+      `Add the value(s) to .env and rebuild.`,
+  );
+}
+
+const firebaseDefine = Object.fromEntries(
+  FIREBASE_KEYS.map((key) => [`process.env.${key}`, JSON.stringify(env[key])]),
+);
 
 export default defineConfig({
   main: {

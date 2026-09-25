@@ -15,7 +15,8 @@
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
-    "package:win": "npm run build && electron-builder --win",
+    "package:win": "node scripts/package-win.mjs",
+    "verify:win": "node scripts/verify-win-native.mjs",
     "package:mac": "npm run build && electron-builder --mac",
     "package:linux": "npm run build && electron-builder --linux"
   },
@@ -49,7 +50,7 @@
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
-    "electron": "^33.4.11",
+    "electron": "33.4.11",
     "electron-builder": "^25.1.8",
     "electron-vite": "^3.1.0",
     "eslint": "^9.14.0",
